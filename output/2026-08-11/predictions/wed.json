@@ -1,0 +1,96 @@
+{
+  "day": "wed",
+  "day_th": "พุธ",
+  "ruler": "mercury",
+  "ruler_th": "พุธ",
+  "ruler_sign": "สิงห์",
+  "ruler_house": "ปัตนิ",
+  "ruler_dignity": [
+    "Peregrine"
+  ],
+  "ruler_retrograde": false,
+  "aspects": [
+    {
+      "planet": "moon",
+      "planet_th": "จันทร์",
+      "aspect": "conjunction",
+      "meaning": "รวมพลัง",
+      "weight": 4,
+      "orb": 3.08,
+      "planet_sign": "กรกฎ",
+      "planet_house": "ปัตนิ"
+    },
+    {
+      "planet": "jupiter",
+      "planet_th": "พฤหัสบดี",
+      "aspect": "conjunction",
+      "meaning": "รวมพลัง",
+      "weight": 4,
+      "orb": 6.56,
+      "planet_sign": "สิงห์",
+      "planet_house": "ปัตนิ"
+    },
+    {
+      "planet": "pluto",
+      "planet_th": "พลูโต",
+      "aspect": "opposition",
+      "meaning": "ปะทะ",
+      "weight": 4,
+      "orb": 178.75,
+      "planet_sign": "กุมภ์",
+      "planet_house": "ตนุ"
+    },
+    {
+      "planet": "neptune",
+      "planet_th": "เนปจูน",
+      "aspect": "trine",
+      "meaning": "หนุนนำ",
+      "weight": 2,
+      "orb": 118.58,
+      "planet_sign": "เมษ",
+      "planet_house": "สหัชชะ"
+    },
+    {
+      "planet": "venus",
+      "planet_th": "ศุกร์",
+      "aspect": "sextile",
+      "meaning": "เกื้อหนุน",
+      "weight": 1,
+      "orb": 61.83,
+      "planet_sign": "ตุลย์",
+      "planet_house": "ศุภะ"
+    },
+    {
+      "planet": "mars",
+      "planet_th": "อังคาร",
+      "aspect": "semi_sextile",
+      "meaning": "ประสาน",
+      "weight": 1,
+      "orb": 32.7,
+      "planet_sign": "เมถุน",
+      "planet_house": "อริ"
+    },
+    {
+      "planet": "uranus",
+      "planet_th": "ยูเรนัส",
+      "aspect": "sextile",
+      "meaning": "เกื้อหนุน",
+      "weight": 1,
+      "orb": 57.38,
+      "planet_sign": "เมถุน",
+      "planet_house": "ปุตตะ"
+    },
+    {
+      "planet": "ketu",
+      "planet_th": "เกตุ",
+      "aspect": "semi_sextile",
+      "meaning": "ประสาน",
+      "weight": 1,
+      "orb": 27.12,
+      "planet_sign": "สิงห์",
+      "planet_house": "มรณะ"
+    }
+  ],
+  "score": 0,
+  "prediction": "ดวงของชาววันพุธ ดาวประจำวันคือพุธ อยู่ในเรือนปัตนิ ราศีสิงห์ รวมพลังกับจันทร์ รวมพลังกับพฤหัสบดี ระวังปะทะจากพลูโต เป็นวันที่ต้องใช้ความสมดุล มีทั้งดีและท้าทาย"
+}

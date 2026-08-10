@@ -4,6 +4,8 @@ let manifest = null;
 let currentYear, currentMonth;
 let currentDay = 'mon';  // default day-of-week
 
+let ephemData = null;  // astrology data cache
+
 // ── Init ──
 document.addEventListener('DOMContentLoaded', () => {
   setupSidebar();
@@ -12,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initStarfield();
   startShootingStars();
   setupCreateStar();
+  loadEphemData();  // preload astrology
   const now = new Date();
   currentYear = now.getFullYear();
   currentMonth = now.getMonth();

@@ -1,0 +1,893 @@
+{
+  "meta": {
+    "date": "2026-08-11",
+    "time": "08:00 ICT",
+    "lat": 13.75,
+    "lng": 100.5,
+    "jd": 2461263.8333333335
+  },
+  "planets": {
+    "sun": {
+      "name_th": "อาทิตย์",
+      "icon": "☀️",
+      "longitude": 138.688321,
+      "latitude_ecl": 0.00012,
+      "distance_au": 1.013526,
+      "speed_deg_day": 0.959842,
+      "sign": "สิงห์",
+      "degree": 18.688321,
+      "retrograde": false,
+      "dms": "138°41'18\"",
+      "house": 7,
+      "house_name": "ปัตนิ"
+    },
+    "moon": {
+      "name_th": "จันทร์",
+      "icon": "🌙",
+      "longitude": 119.610652,
+      "latitude_ecl": 2.655733,
+      "distance_au": 0.002432,
+      "speed_deg_day": 14.69803,
+      "sign": "กรกฎ",
+      "degree": 29.610652,
+      "retrograde": false,
+      "dms": "119°36'38\"",
+      "house": 7,
+      "house_name": "ปัตนิ"
+    },
+    "mercury": {
+      "name_th": "พุธ",
+      "icon": "☿",
+      "longitude": 122.687241,
+      "latitude_ecl": 0.337812,
+      "distance_au": 1.109513,
+      "speed_deg_day": 1.687048,
+      "sign": "สิงห์",
+      "degree": 2.687241,
+      "retrograde": false,
+      "dms": "122°41'14\"",
+      "house": 7,
+      "house_name": "ปัตนิ"
+    },
+    "venus": {
+      "name_th": "ศุกร์",
+      "icon": "♀️",
+      "longitude": 184.520035,
+      "latitude_ecl": -0.990875,
+      "distance_au": 0.717491,
+      "speed_deg_day": 0.9841,
+      "sign": "ตุลย์",
+      "degree": 4.520035,
+      "retrograde": false,
+      "dms": "184°31'12\"",
+      "house": 9,
+      "house_name": "ศุภะ"
+    },
+    "mars": {
+      "name_th": "อังคาร",
+      "icon": "♂️",
+      "longitude": 89.985956,
+      "latitude_ecl": 0.234802,
+      "distance_au": 1.953037,
+      "speed_deg_day": 0.662962,
+      "sign": "เมถุน",
+      "degree": 29.985956,
+      "retrograde": false,
+      "dms": "89°59'09\"",
+      "house": 6,
+      "house_name": "อริ"
+    },
+    "jupiter": {
+      "name_th": "พฤหัส",
+      "icon": "♃",
+      "longitude": 129.243185,
+      "latitude_ecl": 0.492607,
+      "distance_au": 6.287335,
+      "speed_deg_day": 0.21986,
+      "sign": "สิงห์",
+      "degree": 9.243185,
+      "retrograde": false,
+      "dms": "129°14'35\"",
+      "house": 7,
+      "house_name": "ปัตนิ"
+    },
+    "saturn": {
+      "name_th": "เสาร์",
+      "icon": "♄",
+      "longitude": 14.546241,
+      "latitude_ecl": -2.571978,
+      "distance_au": 8.844413,
+      "speed_deg_day": -0.026092,
+      "sign": "เมษ",
+      "degree": 14.546241,
+      "retrograde": true,
+      "dms": "14°32'46\"",
+      "house": 3,
+      "house_name": "สหัชชะ"
+    },
+    "uranus": {
+      "name_th": "ยูเรนัส",
+      "icon": "⛢",
+      "longitude": 65.30821,
+      "latitude_ecl": -0.154577,
+      "distance_au": 19.716017,
+      "speed_deg_day": 0.025089,
+      "sign": "เมถุน",
+      "degree": 5.30821,
+      "retrograde": false,
+      "dms": "65°18'30\"",
+      "house": 5,
+      "house_name": "ปุตตะ"
+    },
+    "neptune": {
+      "name_th": "เนปจูน",
+      "icon": "♆",
+      "longitude": 4.103466,
+      "latitude_ecl": -1.400321,
+      "distance_au": 29.159232,
+      "speed_deg_day": -0.017319,
+      "sign": "เมษ",
+      "degree": 4.103466,
+      "retrograde": true,
+      "dms": "4°06'12\"",
+      "house": 3,
+      "house_name": "สหัชชะ"
+    },
+    "pluto": {
+      "name_th": "พลูโต",
+      "icon": "♇",
+      "longitude": 303.937766,
+      "latitude_ecl": -4.289484,
+      "distance_au": 34.596584,
+      "speed_deg_day": -0.022475,
+      "sign": "กุมภ์",
+      "degree": 3.937766,
+      "retrograde": true,
+      "dms": "303°56'16\"",
+      "house": 1,
+      "house_name": "ตนุ"
+    },
+    "rahu": {
+      "name_th": "ราหู",
+      "icon": "☊",
+      "longitude": 329.807086,
+      "latitude_ecl": 0.0,
+      "distance_au": 0.002681,
+      "speed_deg_day": -0.01748,
+      "sign": "กุมภ์",
+      "degree": 29.807086,
+      "retrograde": true,
+      "dms": "329°48'26\"",
+      "house": 2,
+      "house_name": "กดุมภะ"
+    },
+    "ketu": {
+      "name_th": "เกตุ",
+      "icon": "☋",
+      "longitude": 149.807086,
+      "latitude_ecl": 0,
+      "distance_au": 0.002681,
+      "speed_deg_day": -0.01748,
+      "sign": "สิงห์",
+      "degree": 29.807086,
+      "retrograde": true,
+      "dms": "149°48'26\"",
+      "house": 8,
+      "house_name": "มรณะ"
+    }
+  },
+  "asteroids": {
+    "chiron": {
+      "name_th": "Chiron",
+      "icon": "⚷",
+      "longitude": 30.84197,
+      "speed_deg_day": -0.006664,
+      "sign": "พฤษภ",
+      "degree": 0.84197,
+      "retrograde": true,
+      "house": 3,
+      "house_name": "สหัชชะ",
+      "dms": "30°50'31\""
+    },
+    "ceres": {
+      "name_th": "Ceres",
+      "icon": "⚳",
+      "longitude": 89.523993,
+      "speed_deg_day": 0.370477,
+      "sign": "เมถุน",
+      "degree": 29.523993,
+      "retrograde": false,
+      "house": 6,
+      "house_name": "อริ",
+      "dms": "89°31'26\""
+    },
+    "pallas": {
+      "name_th": "Pallas",
+      "icon": "⚴",
+      "longitude": 22.619842,
+      "speed_deg_day": 0.018594,
+      "sign": "เมษ",
+      "degree": 22.619842,
+      "retrograde": false,
+      "house": 3,
+      "house_name": "สหัชชะ",
+      "dms": "22°37'11\""
+    },
+    "juno": {
+      "name_th": "Juno",
+      "icon": "⚵",
+      "longitude": 300.060907,
+      "speed_deg_day": -0.218548,
+      "sign": "กุมภ์",
+      "degree": 0.060907,
+      "retrograde": true,
+      "house": 1,
+      "house_name": "ตนุ",
+      "dms": "300°03'39\""
+    },
+    "vesta": {
+      "name_th": "Vesta",
+      "icon": "⚶",
+      "longitude": 27.055825,
+      "speed_deg_day": 0.102429,
+      "sign": "เมษ",
+      "degree": 27.055825,
+      "retrograde": false,
+      "house": 3,
+      "house_name": "สหัชชะ",
+      "dms": "27°03'21\""
+    },
+    "lilith": {
+      "name_th": "ลิลิธ",
+      "icon": "⚸",
+      "longitude": 266.158006,
+      "sign": "ธนู",
+      "degree": 26.158006,
+      "dms": "266°09'29\""
+    }
+  },
+  "houses": {
+    "placidus": {
+      "cusps": [
+        264.718692,
+        294.751515,
+        327.059588,
+        0.333085,
+        31.46542,
+        59.122284,
+        84.718692,
+        114.751515,
+        147.059588,
+        180.333085,
+        211.46542,
+        239.122284
+      ],
+      "asc": 264.718692,
+      "mc": 180.333085
+    },
+    "whole_sign": {
+      "cusps": [
+        240.0,
+        270.0,
+        300.0,
+        330.0,
+        0.0,
+        30.0,
+        60.0,
+        90.0,
+        120.0,
+        150.0,
+        180.0,
+        210.0
+      ],
+      "asc": 264.718692,
+      "mc": 180.333085
+    },
+    "koch": {
+      "cusps": [
+        264.718692,
+        292.943068,
+        324.676819,
+        0.333085,
+        29.588461,
+        57.583986,
+        84.718692,
+        112.943068,
+        144.676819,
+        180.333085,
+        209.588461,
+        237.583986
+      ],
+      "asc": 264.718692,
+      "mc": 180.333085
+    },
+    "equal": {
+      "cusps": [
+        264.718692,
+        294.718692,
+        324.718692,
+        354.718692,
+        24.718692,
+        54.718692,
+        84.718692,
+        114.718692,
+        144.718692,
+        174.718692,
+        204.718692,
+        234.718692
+      ],
+      "asc": 264.718692,
+      "mc": 180.333085
+    },
+    "campanus": {
+      "cusps": [
+        264.718692,
+        294.434398,
+        327.312532,
+        0.333085,
+        30.287105,
+        57.553248,
+        84.718692,
+        114.434398,
+        147.312532,
+        180.333085,
+        210.287105,
+        237.553248
+      ],
+      "asc": 264.718692,
+      "mc": 180.333085
+    },
+    "regiomontanus": {
+      "cusps": [
+        264.718692,
+        293.683513,
+        326.496919,
+        0.333085,
+        30.97105,
+        58.191085,
+        84.718692,
+        113.683513,
+        146.496919,
+        180.333085,
+        210.97105,
+        238.191085
+      ],
+      "asc": 264.718692,
+      "mc": 180.333085
+    }
+  },
+  "sidereal": {
+    "ayanamsa": 25.112016,
+    "planets": {
+      "sun": {
+        "longitude": 113.576305,
+        "sign": "กรกฎ",
+        "degree": 23.576305,
+        "dms": "113°34'35\""
+      },
+      "moon": {
+        "longitude": 94.498636,
+        "sign": "กรกฎ",
+        "degree": 4.498636,
+        "dms": "94°29'55\""
+      },
+      "mercury": {
+        "longitude": 97.575225,
+        "sign": "กรกฎ",
+        "degree": 7.575225,
+        "dms": "97°34'31\""
+      },
+      "venus": {
+        "longitude": 159.408019,
+        "sign": "กันย์",
+        "degree": 9.408019,
+        "dms": "159°24'29\""
+      },
+      "mars": {
+        "longitude": 64.87394,
+        "sign": "เมถุน",
+        "degree": 4.87394,
+        "dms": "64°52'26\""
+      },
+      "jupiter": {
+        "longitude": 104.131169,
+        "sign": "กรกฎ",
+        "degree": 14.131169,
+        "dms": "104°07'52\""
+      },
+      "saturn": {
+        "longitude": 349.434225,
+        "sign": "มีน",
+        "degree": 19.434225,
+        "dms": "349°26'03\""
+      },
+      "uranus": {
+        "longitude": 40.196194,
+        "sign": "พฤษภ",
+        "degree": 10.196194,
+        "dms": "40°11'46\""
+      },
+      "neptune": {
+        "longitude": 338.99145,
+        "sign": "มีน",
+        "degree": 8.99145,
+        "dms": "338°59'29\""
+      },
+      "pluto": {
+        "longitude": 278.82575,
+        "sign": "มังกร",
+        "degree": 8.82575,
+        "dms": "278°49'33\""
+      },
+      "rahu": {
+        "longitude": 304.69507,
+        "sign": "กุมภ์",
+        "degree": 4.69507,
+        "dms": "304°41'42\""
+      },
+      "ketu": {
+        "longitude": 124.69507,
+        "sign": "สิงห์",
+        "degree": 4.69507,
+        "dms": "124°41'42\""
+      }
+    },
+    "ayanamsa_dms": "25°06'43\""
+  },
+  "arabic_parts": {
+    "fortune": {
+      "name_th": "🍀 โชคลาภ",
+      "longitude": 245.641023,
+      "sign": "ธนู",
+      "degree": 5.641023,
+      "dms": "245°38'28\""
+    },
+    "spirit": {
+      "name_th": "✨ จิตวิญญาณ",
+      "longitude": 283.796361,
+      "sign": "มังกร",
+      "degree": 13.796361,
+      "dms": "283°47'47\""
+    },
+    "love": {
+      "name_th": "💕 ความรัก",
+      "longitude": 359.252771,
+      "sign": "มีน",
+      "degree": 29.252771,
+      "dms": "359°15'10\""
+    },
+    "death": {
+      "name_th": "⚔️ วาระสุดท้าย",
+      "longitude": 189.278977,
+      "sign": "ตุลย์",
+      "degree": 9.278977,
+      "dms": "189°16'44\""
+    },
+    "marriage": {
+      "name_th": "🤝 คู่ครอง",
+      "longitude": 94.744898,
+      "sign": "กรกฎ",
+      "degree": 4.744898,
+      "dms": "94°44'42\""
+    },
+    "passion": {
+      "name_th": "🔥 กิเลส",
+      "longitude": 340.158407,
+      "sign": "มีน",
+      "degree": 10.158407,
+      "dms": "340°09'30\""
+    },
+    "knowledge": {
+      "name_th": "📚 ความรู้",
+      "longitude": 258.162748,
+      "sign": "ธนู",
+      "degree": 18.162748,
+      "dms": "258°09'46\""
+    },
+    "victory": {
+      "name_th": "👑 ชัยชนะ",
+      "longitude": 28.860772,
+      "sign": "เมษ",
+      "degree": 28.860772,
+      "dms": "28°51'39\""
+    }
+  },
+  "fixed_stars": {
+    "regulus": {
+      "name_th": "หัวใจสิงห์",
+      "longitude": 150.196354,
+      "sign": "กันย์",
+      "degree": 0.196354,
+      "magnitude": 1.4,
+      "dms": "150°11'47\""
+    },
+    "spica": {
+      "name_th": "รวงข้าว",
+      "longitude": 204.213099,
+      "sign": "ตุลย์",
+      "degree": 24.213099,
+      "magnitude": 1.0,
+      "dms": "204°12'47\""
+    },
+    "aldebaran": {
+      "name_th": "ตาวัว",
+      "longitude": 70.161974,
+      "sign": "เมถุน",
+      "degree": 10.161974,
+      "magnitude": 0.9,
+      "dms": "70°09'43\""
+    },
+    "antares": {
+      "name_th": "คู่ปรับ Mars",
+      "longitude": 250.138605,
+      "sign": "ธนู",
+      "degree": 10.138605,
+      "magnitude": 1.0,
+      "dms": "250°08'19\""
+    },
+    "fomalhaut": {
+      "name_th": "ปากปลา",
+      "longitude": 334.243618,
+      "sign": "มีน",
+      "degree": 4.243618,
+      "magnitude": 1.2,
+      "dms": "334°14'37\""
+    },
+    "sirius": {
+      "name_th": "สุนัขใหญ่",
+      "longitude": 104.445217,
+      "sign": "กรกฎ",
+      "degree": 14.445217,
+      "magnitude": -1.5,
+      "dms": "104°26'43\""
+    },
+    "vega": {
+      "name_th": "พิณ",
+      "longitude": 285.702125,
+      "sign": "มังกร",
+      "degree": 15.702125,
+      "magnitude": 0.0,
+      "dms": "285°42'08\""
+    },
+    "capella": {
+      "name_th": "แพะ",
+      "longitude": 82.2293,
+      "sign": "เมถุน",
+      "degree": 22.2293,
+      "magnitude": 0.1,
+      "dms": "82°13'45\""
+    },
+    "rigel": {
+      "name_th": "เท้านายพราน",
+      "longitude": 77.201255,
+      "sign": "เมถุน",
+      "degree": 17.201255,
+      "magnitude": 0.1,
+      "dms": "77°12'05\""
+    },
+    "betelgeuse": {
+      "name_th": "ไหล่นายพราน",
+      "longitude": 89.125433,
+      "sign": "เมถุน",
+      "degree": 29.125433,
+      "magnitude": 0.5,
+      "dms": "89°07'32\""
+    },
+    "procyon": {
+      "name_th": "สุนัขเล็ก",
+      "longitude": 116.150086,
+      "sign": "กรกฎ",
+      "degree": 26.150086,
+      "magnitude": 0.4,
+      "dms": "116°09'00\""
+    },
+    "altair": {
+      "name_th": "อินทรี",
+      "longitude": 302.160957,
+      "sign": "กุมภ์",
+      "degree": 2.160957,
+      "magnitude": 0.8,
+      "dms": "302°09'39\""
+    },
+    "deneb": {
+      "name_th": "หงส์",
+      "longitude": 335.708786,
+      "sign": "มีน",
+      "degree": 5.708786,
+      "magnitude": 1.3,
+      "dms": "335°42'32\""
+    },
+    "polaris": {
+      "name_th": "ดาวเหนือ",
+      "longitude": 88.934021,
+      "sign": "เมถุน",
+      "degree": 28.934021,
+      "magnitude": 2.0,
+      "dms": "88°56'02\""
+    },
+    "algol": {
+      "name_th": "หัวปีศาจ",
+      "longitude": 56.540587,
+      "sign": "พฤษภ",
+      "degree": 26.540587,
+      "magnitude": 2.1,
+      "dms": "56°32'26\""
+    },
+    "arcturus": {
+      "name_th": "ผู้พิทักษ์หมี",
+      "longitude": 204.605032,
+      "sign": "ตุลย์",
+      "degree": 24.605032,
+      "magnitude": -0.1,
+      "dms": "204°36'18\""
+    },
+    "canopus": {
+      "name_th": "เต่า",
+      "longitude": 105.311692,
+      "sign": "กรกฎ",
+      "degree": 15.311692,
+      "magnitude": -0.7,
+      "dms": "105°18'42\""
+    },
+    "castor": {
+      "name_th": "ฝาแฝด 1",
+      "longitude": 110.608662,
+      "sign": "กรกฎ",
+      "degree": 20.608662,
+      "magnitude": 1.6,
+      "dms": "110°36'31\""
+    },
+    "pollux": {
+      "name_th": "ฝาแฝด 2",
+      "longitude": 113.580651,
+      "sign": "กรกฎ",
+      "degree": 23.580651,
+      "magnitude": 1.2,
+      "dms": "113°34'50\""
+    },
+    "achernar": {
+      "name_th": "ปลายแม่น้ำ",
+      "longitude": 345.701888,
+      "sign": "มีน",
+      "degree": 15.701888,
+      "magnitude": 0.5,
+      "dms": "345°42'07\""
+    }
+  },
+  "dignities": {
+    "sun": [
+      "เกษตร (Domicile)"
+    ],
+    "moon": [
+      "เกษตร (Domicile)"
+    ],
+    "mercury": [
+      "Peregrine"
+    ],
+    "venus": [
+      "เกษตร (Domicile)"
+    ],
+    "mars": [
+      "Peregrine"
+    ],
+    "jupiter": [
+      "Peregrine"
+    ],
+    "saturn": [
+      "นิจ (Fall)"
+    ]
+  },
+  "planetary_hours": {
+    "sunrise_ict": "06:04",
+    "sunset_ict": "18:41",
+    "day_length_h": 12.63,
+    "night_length_h": 11.37,
+    "day_hour_min": 63.0,
+    "night_hour_min": 57.0,
+    "day_hours": [
+      {
+        "hour": 1,
+        "ruler": "sun",
+        "start_ict": "06:04",
+        "end_ict": "07:07"
+      },
+      {
+        "hour": 2,
+        "ruler": "venus",
+        "start_ict": "07:07",
+        "end_ict": "08:10"
+      },
+      {
+        "hour": 3,
+        "ruler": "mercury",
+        "start_ict": "08:10",
+        "end_ict": "09:13"
+      },
+      {
+        "hour": 4,
+        "ruler": "moon",
+        "start_ict": "09:13",
+        "end_ict": "10:16"
+      },
+      {
+        "hour": 5,
+        "ruler": "saturn",
+        "start_ict": "10:16",
+        "end_ict": "11:20"
+      },
+      {
+        "hour": 6,
+        "ruler": "jupiter",
+        "start_ict": "11:20",
+        "end_ict": "12:23"
+      },
+      {
+        "hour": 7,
+        "ruler": "mars",
+        "start_ict": "12:23",
+        "end_ict": "13:26"
+      },
+      {
+        "hour": 8,
+        "ruler": "sun",
+        "start_ict": "13:26",
+        "end_ict": "14:29"
+      },
+      {
+        "hour": 9,
+        "ruler": "venus",
+        "start_ict": "14:29",
+        "end_ict": "15:32"
+      },
+      {
+        "hour": 10,
+        "ruler": "mercury",
+        "start_ict": "15:32",
+        "end_ict": "16:35"
+      },
+      {
+        "hour": 11,
+        "ruler": "moon",
+        "start_ict": "16:35",
+        "end_ict": "17:38"
+      },
+      {
+        "hour": 12,
+        "ruler": "saturn",
+        "start_ict": "17:38",
+        "end_ict": "18:41"
+      }
+    ],
+    "night_hours": [
+      {
+        "hour": 1,
+        "ruler": "jupiter",
+        "start_ict": "18:41",
+        "end_ict": "19:38"
+      },
+      {
+        "hour": 2,
+        "ruler": "mars",
+        "start_ict": "19:38",
+        "end_ict": "20:35"
+      },
+      {
+        "hour": 3,
+        "ruler": "sun",
+        "start_ict": "20:35",
+        "end_ict": "21:32"
+      },
+      {
+        "hour": 4,
+        "ruler": "venus",
+        "start_ict": "21:32",
+        "end_ict": "22:29"
+      },
+      {
+        "hour": 5,
+        "ruler": "mercury",
+        "start_ict": "22:29",
+        "end_ict": "23:26"
+      },
+      {
+        "hour": 6,
+        "ruler": "moon",
+        "start_ict": "23:26",
+        "end_ict": "00:23"
+      },
+      {
+        "hour": 7,
+        "ruler": "saturn",
+        "start_ict": "00:23",
+        "end_ict": "01:20"
+      },
+      {
+        "hour": 8,
+        "ruler": "jupiter",
+        "start_ict": "01:20",
+        "end_ict": "02:16"
+      },
+      {
+        "hour": 9,
+        "ruler": "mars",
+        "start_ict": "02:16",
+        "end_ict": "03:13"
+      },
+      {
+        "hour": 10,
+        "ruler": "sun",
+        "start_ict": "03:13",
+        "end_ict": "04:10"
+      },
+      {
+        "hour": 11,
+        "ruler": "venus",
+        "start_ict": "04:10",
+        "end_ict": "05:07"
+      },
+      {
+        "hour": 12,
+        "ruler": "mercury",
+        "start_ict": "05:07",
+        "end_ict": "06:04"
+      }
+    ],
+    "current": {
+      "period": "day",
+      "hour": 2,
+      "ruler": "venus"
+    }
+  },
+  "sabian": {
+    "sun": {
+      "sign": "สิงห์",
+      "degree": 18,
+      "key": "4_18"
+    },
+    "moon": {
+      "sign": "กรกฎ",
+      "degree": 29,
+      "key": "3_29"
+    },
+    "mars": {
+      "sign": "เมถุน",
+      "degree": 29,
+      "key": "2_29"
+    },
+    "venus": {
+      "sign": "ตุลย์",
+      "degree": 4,
+      "key": "6_4"
+    },
+    "mercury": {
+      "sign": "สิงห์",
+      "degree": 2,
+      "key": "4_2"
+    },
+    "jupiter": {
+      "sign": "สิงห์",
+      "degree": 9,
+      "key": "4_9"
+    },
+    "saturn": {
+      "sign": "เมษ",
+      "degree": 14,
+      "key": "0_14"
+    },
+    "ascendant": {
+      "sign": "ธนู",
+      "degree": 24,
+      "key": "8_24"
+    }
+  },
+  "ascendant": {
+    "sign": "ธนู",
+    "degree": 24.718692,
+    "longitude": 264.718692
+  },
+  "mc": {
+    "sign": "ตุลย์",
+    "degree": 0.333085,
+    "longitude": 180.333085
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "day": "tue",
+  "day_th": "อังคาร",
+  "ruler": "mars",
+  "ruler_th": "อังคาร",
+  "ruler_sign": "เมถุน",
+  "ruler_house": "อริ",
+  "ruler_dignity": [
+    "Peregrine"
+  ],
+  "ruler_retrograde": false,
+  "aspects": [
+    {
+      "planet": "venus",
+      "planet_th": "ศุกร์",
+      "aspect": "square",
+      "meaning": "กดดัน",
+      "weight": 3,
+      "orb": 94.53,
+      "planet_sign": "ตุลย์",
+      "planet_house": "ศุภะ"
+    },
+    {
+      "planet": "neptune",
+      "planet_th": "เนปจูน",
+      "aspect": "square",
+      "meaning": "กดดัน",
+      "weight": 3,
+      "orb": 85.88,
+      "planet_sign": "เมษ",
+      "planet_house": "สหัชชะ"
+    },
+    {
+      "planet": "rahu",
+      "planet_th": "ราหู",
+      "aspect": "trine",
+      "meaning": "หนุนนำ",
+      "weight": 2,
+      "orb": 120.18,
+      "planet_sign": "กุมภ์",
+      "planet_house": "กดุมภะ"
+    },
+    {
+      "planet": "moon",
+      "planet_th": "จันทร์",
+      "aspect": "semi_sextile",
+      "meaning": "ประสาน",
+      "weight": 1,
+      "orb": 29.62,
+      "planet_sign": "กรกฎ",
+      "planet_house": "ปัตนิ"
+    },
+    {
+      "planet": "mercury",
+      "planet_th": "พุธ",
+      "aspect": "semi_sextile",
+      "meaning": "ประสาน",
+      "weight": 1,
+      "orb": 32.7,
+      "planet_sign": "สิงห์",
+      "planet_house": "ปัตนิ"
+    },
+    {
+      "planet": "ketu",
+      "planet_th": "เกตุ",
+      "aspect": "sextile",
+      "meaning": "เกื้อหนุน",
+      "weight": 1,
+      "orb": 59.82,
+      "planet_sign": "สิงห์",
+      "planet_house": "มรณะ"
+    }
+  ],
+  "score": -3,
+  "prediction": "ดวงของชาววันอังคาร ดาวประจำวันคืออังคาร อยู่ในเรือนอริ ราศีเมถุน ระวังกดดันจากศุกร์ ระวังกดดันจากเนปจูน ได้รับหนุนนำจากราหู ควรใช้ความระมัดระวังในการตัดสินใจ"
+}

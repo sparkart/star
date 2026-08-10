@@ -1,0 +1,26 @@
+{
+  "day": "sun",
+  "day_th": "อาทิตย์",
+  "ruler": "sun",
+  "ruler_th": "อาทิตย์",
+  "ruler_sign": "สิงห์",
+  "ruler_house": "ปัตนิ",
+  "ruler_dignity": [
+    "เกษตร (Domicile)"
+  ],
+  "ruler_retrograde": false,
+  "aspects": [
+    {
+      "planet": "saturn",
+      "planet_th": "เสาร์",
+      "aspect": "trine",
+      "meaning": "หนุนนำ",
+      "weight": 2,
+      "orb": 124.14,
+      "planet_sign": "เมษ",
+      "planet_house": "สหัชชะ"
+    }
+  ],
+  "score": 2,
+  "prediction": "ดวงของชาววันอาทิตย์ ดาวประจำวันคืออาทิตย์ อยู่ในเรือนปัตนิ ราศีสิงห์ อยู่ในตำแหน่งเกษตร มีความแข็งแกร่ง ได้รับหนุนนำจากเสาร์ เป็นวันที่ต้องใช้ความสมดุล มีทั้งดีและท้าทาย"
+}

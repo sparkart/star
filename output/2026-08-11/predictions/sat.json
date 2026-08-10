@@ -1,0 +1,36 @@
+{
+  "day": "sat",
+  "day_th": "เสาร์",
+  "ruler": "saturn",
+  "ruler_th": "เสาร์",
+  "ruler_sign": "เมษ",
+  "ruler_house": "สหัชชะ",
+  "ruler_dignity": [
+    "นิจ (Fall)"
+  ],
+  "ruler_retrograde": true,
+  "aspects": [
+    {
+      "planet": "sun",
+      "planet_th": "อาทิตย์",
+      "aspect": "trine",
+      "meaning": "หนุนนำ",
+      "weight": 2,
+      "orb": 124.14,
+      "planet_sign": "สิงห์",
+      "planet_house": "ปัตนิ"
+    },
+    {
+      "planet": "jupiter",
+      "planet_th": "พฤหัสบดี",
+      "aspect": "trine",
+      "meaning": "หนุนนำ",
+      "weight": 2,
+      "orb": 114.7,
+      "planet_sign": "สิงห์",
+      "planet_house": "ปัตนิ"
+    }
+  ],
+  "score": 4,
+  "prediction": "ดวงของชาววันเสาร์ ดาวประจำวันคือเสาร์ อยู่ในเรือนสหัชชะ ราศีเมษ (กำลังโคจรถอยหลัง) อยู่ในตำแหน่งนิจ อาจรู้สึกอ่อนล้า ได้รับหนุนนำจากอาทิตย์ ได้รับหนุนนำจากพฤหัสบดี โดยรวมเป็นวันที่ดี มีโอกาสและพลังงานบวก"
+}

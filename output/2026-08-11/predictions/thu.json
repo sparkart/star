@@ -1,0 +1,76 @@
+{
+  "day": "thu",
+  "day_th": "พฤหัสบดี",
+  "ruler": "jupiter",
+  "ruler_th": "พฤหัสบดี",
+  "ruler_sign": "สิงห์",
+  "ruler_house": "ปัตนิ",
+  "ruler_dignity": [
+    "Peregrine"
+  ],
+  "ruler_retrograde": false,
+  "aspects": [
+    {
+      "planet": "mercury",
+      "planet_th": "พุธ",
+      "aspect": "conjunction",
+      "meaning": "รวมพลัง",
+      "weight": 4,
+      "orb": 6.56,
+      "planet_sign": "สิงห์",
+      "planet_house": "ปัตนิ"
+    },
+    {
+      "planet": "pluto",
+      "planet_th": "พลูโต",
+      "aspect": "opposition",
+      "meaning": "ปะทะ",
+      "weight": 4,
+      "orb": 174.69,
+      "planet_sign": "กุมภ์",
+      "planet_house": "ตนุ"
+    },
+    {
+      "planet": "saturn",
+      "planet_th": "เสาร์",
+      "aspect": "trine",
+      "meaning": "หนุนนำ",
+      "weight": 2,
+      "orb": 114.7,
+      "planet_sign": "เมษ",
+      "planet_house": "สหัชชะ"
+    },
+    {
+      "planet": "neptune",
+      "planet_th": "เนปจูน",
+      "aspect": "trine",
+      "meaning": "หนุนนำ",
+      "weight": 2,
+      "orb": 125.14,
+      "planet_sign": "เมษ",
+      "planet_house": "สหัชชะ"
+    },
+    {
+      "planet": "venus",
+      "planet_th": "ศุกร์",
+      "aspect": "sextile",
+      "meaning": "เกื้อหนุน",
+      "weight": 1,
+      "orb": 55.28,
+      "planet_sign": "ตุลย์",
+      "planet_house": "ศุภะ"
+    },
+    {
+      "planet": "uranus",
+      "planet_th": "ยูเรนัส",
+      "aspect": "sextile",
+      "meaning": "เกื้อหนุน",
+      "weight": 1,
+      "orb": 63.93,
+      "planet_sign": "เมถุน",
+      "planet_house": "ปุตตะ"
+    }
+  ],
+  "score": 2,
+  "prediction": "ดวงของชาววันพฤหัสบดี ดาวประจำวันคือพฤหัสบดี อยู่ในเรือนปัตนิ ราศีสิงห์ รวมพลังกับพุธ ระวังปะทะจากพลูโต ได้รับหนุนนำจากเสาร์ เป็นวันที่ต้องใช้ความสมดุล มีทั้งดีและท้าทาย"
+}
