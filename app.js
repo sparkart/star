@@ -381,6 +381,7 @@ function setupDaySelector() {
       currentDay = btn.dataset.day;
       const dateStr = getCurrentDate();
       loadScript(dateStr, currentDay);
+      loadPostData(dateStr, currentDay);
     });
   });
 }
@@ -439,8 +440,8 @@ function showDetail(dateStr) {
   // Meta
   loadMeta(dateStr, day);
 
-  // Post (Caption + Hashtags)
-  loadPostData(dateStr);
+  // Post (Caption + Hashtags) — pass currentDay
+  loadPostData(dateStr, currentDay);
 
   // Buttons
   document.getElementById('download-video').classList.toggle('hidden', !(day && day.has_video));
@@ -492,31 +493,38 @@ function loadMeta(dateStr, day) {
 }
 
 // ── Post Data (Caption + Hashtags) ──
-function loadPostData(dateStr) {
-  const day = getDay(dateStr);
+function loadPostData(dateStr, day) {
+  const dayData = getDay(dateStr);
   const captionDisplay = document.getElementById('caption-display');
   const hashtagDisplay = document.getElementById('hashtag-display');
   const postStatus = document.getElementById('post-status');
+  const dayParam = day || currentDay || 'mon';
 
   postStatus.textContent = '';
   postStatus.className = 'status-msg';
 
-  if (day && day.caption) {
-    captionDisplay.textContent = day.caption;
+  if (dayData && dayData.captions && dayData.captions[dayParam]) {
+    const caps = dayData.captions[dayParam];
+    captionDisplay.textContent = caps.caption || '(ยังไม่มีแคปชั่น)';
+    
+    hashtagDisplay.innerHTML = '';
+    if (caps.hashtags && caps.hashtags.length > 0) {
+      caps.hashtags.forEach(tag => {
+        const span = document.createElement('span');
+        span.className = 'hashtag-tag';
+        span.textContent = tag;
+        hashtagDisplay.appendChild(span);
+      });
+    } else {
+      hashtagDisplay.innerHTML = '<span style="color: var(--muted); font-size: .85rem;">(ยังไม่มีแฮชแท็ก)</span>';
+    }
+  } else if (dayData && dayData.captions && Object.keys(dayData.captions).length > 0) {
+    // Has captions but not for this day — show fallback
+    captionDisplay.textContent = '(ยังไม่มีแคปชั่นสำหรับวันนี้)';
+    hashtagDisplay.innerHTML = '<span style="color: var(--muted); font-size: .85rem;">(ยังไม่มีแฮชแท็ก)</span>';
   } else {
     captionDisplay.textContent = '(ยังไม่มีแคปชั่น)';
-  }
-
-  hashtagDisplay.innerHTML = '';
-  if (day && day.hashtags && day.hashtags.length > 0) {
-    day.hashtags.forEach(tag => {
-      const span = document.createElement('span');
-      span.className = 'hashtag-tag';
-      span.textContent = tag;
-      hashtagDisplay.appendChild(span);
-    });
-  } else {
-    hashtagDisplay.innerHTML = '<span style="color: var(--muted); font-size: .85rem;">(ยังไม่มีแคปชั่น)</span>';
+    hashtagDisplay.innerHTML = '<span style="color: var(--muted); font-size: .85rem;">(ยังไม่มีแฮชแท็ก)</span>';
   }
 }
 
