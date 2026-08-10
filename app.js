@@ -1,4 +1,4 @@
-// SparkArt Asset Manager — app.js
+// Star Asset Manager — app.js
 const CDN = '/cdn/star';
 let manifest = null;
 let currentYear, currentMonth;

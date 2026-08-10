@@ -23,7 +23,7 @@ class Handler(BaseHTTPRequestHandler):
         
         # Deploy in background
         subprocess.Popen(["bash", "/var/www/star/deploy.sh"],
-                         stdout=open("/var/log/star-deploy.log", "a"),
+                         stdout=open("/tmp/star-deploy.log", "a"),
                          stderr=subprocess.STDOUT)
     
     def do_GET(self):
