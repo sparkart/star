@@ -209,7 +209,7 @@ a:hover { color: var(--accent); }
   width: 4px; height: 4px;
   background: var(--star-dim);
   border-radius: 50%;
-  top: 25%;
+  top: 12%;
   left: calc(50% - 2px);
   transition: all .4s;
   box-shadow: 0 0 0px var(--star-dim);
@@ -239,8 +239,8 @@ a:hover { color: var(--accent); }
 .cal-day.status-done::before {
   background: var(--green);
   box-shadow: 0 0 6px var(--green), 0 0 12px var(--green);
-  width: 5px; height: 5px;
-  left: calc(50% - 2.5px);
+  width: 6px; height: 6px;
+  top: 8px; right: 8px; left: auto;
 }
 .cal-day.status-generating {
   border-color: var(--orange);
@@ -250,10 +250,16 @@ a:hover { color: var(--accent); }
 .cal-day.status-generating::before {
   background: var(--orange);
   box-shadow: 0 0 8px var(--orange), 0 0 16px var(--orange);
-  width: 5px; height: 5px;
-  left: calc(50% - 2.5px);
+  width: 6px; height: 6px;
+  top: 8px; right: 8px; left: auto;
 }
 .cal-day.status-failed { border-color: var(--red); }
+.cal-day.status-failed::before {
+  background: var(--red);
+  box-shadow: 0 0 6px var(--red);
+  width: 6px; height: 6px;
+  top: 8px; right: 8px; left: auto;
+}
 .cal-day.status-empty { opacity: .5; }
 .cal-day.status-empty::before { background: var(--muted); box-shadow: none; }
 
