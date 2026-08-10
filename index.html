@@ -79,6 +79,7 @@
     <!-- Tabs -->
     <div class="tabs">
       <button class="tab active" data-tab="script">📝 Script</button>
+      <button class="tab" data-tab="post">📱 โพสต์</button>
       <button class="tab" data-tab="audio">🎤 Audio</button>
       <button class="tab" data-tab="meta">ℹ️ Meta</button>
     </div>
@@ -105,6 +106,20 @@
       <pre id="script-display"></pre>
       <textarea id="script-editor" class="hidden"></textarea>
       <div id="script-status" class="status-msg"></div>
+    </div>
+
+    <div class="tab-panel" id="panel-post">
+      <div class="caption-box">
+        <div class="caption-label">📝 Caption</div>
+        <div class="caption-text" id="caption-display"></div>
+        <button class="copy-btn" id="copy-caption">📋 Copy</button>
+      </div>
+      <div class="hashtag-box">
+        <div class="caption-label">#️⃣ Hashtags</div>
+        <div class="hashtag-list" id="hashtag-display"></div>
+        <button class="copy-btn" id="copy-hashtags">📋 Copy All</button>
+      </div>
+      <div id="post-status" class="status-msg"></div>
     </div>
 
     <div class="tab-panel" id="panel-audio">

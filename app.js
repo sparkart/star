@@ -439,6 +439,9 @@ function showDetail(dateStr) {
   // Meta
   loadMeta(dateStr, day);
 
+  // Post (Caption + Hashtags)
+  loadPostData(dateStr);
+
   // Buttons
   document.getElementById('download-video').classList.toggle('hidden', !(day && day.has_video));
   document.getElementById('download-audio').classList.toggle('hidden', !(day && day.has_audio));
@@ -486,6 +489,35 @@ function loadMeta(dateStr, day) {
     ['CDN', `${CDN}/${dateStr}/`]
   ];
   table.innerHTML = rows.map(([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
+}
+
+// ── Post Data (Caption + Hashtags) ──
+function loadPostData(dateStr) {
+  const day = getDay(dateStr);
+  const captionDisplay = document.getElementById('caption-display');
+  const hashtagDisplay = document.getElementById('hashtag-display');
+  const postStatus = document.getElementById('post-status');
+
+  postStatus.textContent = '';
+  postStatus.className = 'status-msg';
+
+  if (day && day.caption) {
+    captionDisplay.textContent = day.caption;
+  } else {
+    captionDisplay.textContent = '(ยังไม่มีแคปชั่น)';
+  }
+
+  hashtagDisplay.innerHTML = '';
+  if (day && day.hashtags && day.hashtags.length > 0) {
+    day.hashtags.forEach(tag => {
+      const span = document.createElement('span');
+      span.className = 'hashtag-tag';
+      span.textContent = tag;
+      hashtagDisplay.appendChild(span);
+    });
+  } else {
+    hashtagDisplay.innerHTML = '<span style="color: var(--muted); font-size: .85rem;">(ยังไม่มีแคปชั่น)</span>';
+  }
 }
 
 // ── Edit Script ──
@@ -599,6 +631,43 @@ function pollStatus(dateStr) {
     }
   }, 5000);
 }
+
+// ── Copy Caption ──
+document.getElementById('copy-caption').addEventListener('click', () => {
+  const text = document.getElementById('caption-display').textContent;
+  if (!text || text === '(ยังไม่มีแคปชั่น)') {
+    showToast('⚠️ ยังไม่มีแคปชั่นให้คัดลอก');
+    return;
+  }
+  navigator.clipboard.writeText(text).then(() => {
+    const status = document.getElementById('post-status');
+    status.textContent = '✓ คัดลอกแคปชั่นแล้ว';
+    status.className = 'status-msg success';
+    showToast('📋 คัดลอกแคปชั่นแล้ว!');
+    setTimeout(() => { status.textContent = ''; status.className = 'status-msg'; }, 3000);
+  }).catch(() => {
+    showToast('⚠️ คัดลอกไม่สำเร็จ');
+  });
+});
+
+// ── Copy Hashtags ──
+document.getElementById('copy-hashtags').addEventListener('click', () => {
+  const tags = document.querySelectorAll('#hashtag-display .hashtag-tag');
+  if (tags.length === 0) {
+    showToast('⚠️ ยังไม่มีแฮชแท็กให้คัดลอก');
+    return;
+  }
+  const text = Array.from(tags).map(t => t.textContent).join(' ');
+  navigator.clipboard.writeText(text).then(() => {
+    const status = document.getElementById('post-status');
+    status.textContent = '✓ คัดลอกแฮชแท็กแล้ว';
+    status.className = 'status-msg success';
+    showToast('#️⃣ คัดลอกแฮชแท็กแล้ว!');
+    setTimeout(() => { status.textContent = ''; status.className = 'status-msg'; }, 3000);
+  }).catch(() => {
+    showToast('⚠️ คัดลอกไม่สำเร็จ');
+  });
+});
 
 // ── Tabs ──
 document.querySelectorAll('.tab').forEach(tab => {
