@@ -20,11 +20,31 @@
   <div class="sub-nav" id="subNav"></div>
 </aside>
 
+<!-- Starfield Canvas -->
+<canvas id="starfield"></canvas>
+
+<!-- Shooting Star -->
+<div class="shooting-star" id="shooting-star"></div>
+
 <!-- Main -->
 <main class="main" id="app">
 
   <!-- Calendar View -->
   <section id="calendar-view">
+    <!-- Hero -->
+    <div class="star-hero">
+      <div class="star-counter">
+        <span class="star-count-num" id="star-count">0</span>
+        <span class="star-count-label">ดวงดาว</span>
+      </div>
+      <div class="star-of-day" id="star-of-day">
+        <span class="sod-icon">🌟</span>
+        <span class="sod-text">Star of the Day</span>
+      </div>
+      <button class="create-star-btn" id="create-star-btn">
+        ✨ สร้างดาว
+      </button>
+    </div>
     <div class="cal-header">
       <button id="prev-month">◀</button>
       <h1 id="month-title">August 2026</h1>

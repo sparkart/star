@@ -11,6 +11,8 @@
   --blue: #60a5fa;
   --orange: #fb923c;
   --radius: 8px;
+  --star-glow: #fff8dc;
+  --star-dim: #3a3a5e;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -23,6 +25,135 @@ body {
 }
 a { color: var(--blue); text-decoration: none; }
 a:hover { color: var(--accent); }
+
+/* ── Starfield Canvas ── */
+#starfield {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: .6;
+}
+
+/* ── Shooting Star ── */
+.shooting-star {
+  position: fixed;
+  z-index: 999;
+  width: 3px;
+  height: 3px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 6px 2px var(--accent), 0 0 12px 4px var(--accent), 0 0 24px 8px #fff;
+  pointer-events: none;
+  opacity: 0;
+}
+.shooting-star::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 100%;
+  width: 80px;
+  height: 1px;
+  background: linear-gradient(to left, var(--accent), transparent);
+  transform: translateY(-50%);
+}
+.shooting-star.fly {
+  animation: shoot 1.2s ease-out forwards;
+}
+@keyframes shoot {
+  0%   { opacity: 1; transform: translate(0, 0) rotate(-30deg); }
+  30%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(-600px, 300px) rotate(-30deg); }
+}
+
+/* ── Hero ── */
+.star-hero {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+  padding: 1.5rem 2rem;
+  margin-bottom: 1.5rem;
+  background: rgba(10,10,26,.7);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  flex-wrap: wrap;
+}
+.star-counter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 80px;
+}
+.star-count-num {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: var(--accent);
+  line-height: 1;
+  text-shadow: 0 0 20px rgba(255,215,0,.5);
+  transition: all .6s cubic-bezier(.4,0,.2,1);
+}
+.star-count-label {
+  font-size: .75rem;
+  color: var(--muted);
+  margin-top: .2rem;
+}
+.star-of-day {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .5rem 1rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  font-size: .9rem;
+  transition: all .3s;
+}
+.star-of-day.has-star {
+  border-color: var(--accent);
+  box-shadow: 0 0 16px rgba(255,215,0,.15);
+}
+.sod-icon { font-size: 1.3rem; }
+.create-star-btn {
+  padding: .6rem 1.5rem;
+  background: linear-gradient(135deg, var(--accent), #ff8c00);
+  color: #000;
+  font-weight: 700;
+  border: none;
+  border-radius: 24px;
+  cursor: pointer;
+  font-size: .95rem;
+  transition: all .3s;
+  box-shadow: 0 0 20px rgba(255,215,0,.25);
+  position: relative;
+  overflow: hidden;
+}
+.create-star-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 30px rgba(255,215,0,.4);
+}
+.create-star-btn:active {
+  transform: scale(.95);
+}
+.create-star-btn::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 26px;
+  background: linear-gradient(135deg, var(--accent), #fff, var(--accent));
+  z-index: -1;
+  animation: border-glow 2s linear infinite;
+  opacity: 0;
+  transition: opacity .3s;
+}
+.create-star-btn:hover::after { opacity: 1; }
+@keyframes border-glow {
+  0%,100% { filter: blur(4px); }
+  50%     { filter: blur(8px); }
+}
 
 /* ── Sidebar ── */
 .hamburger { display: none; position: fixed; top: 1rem; left: 1rem; z-index: 200; background: var(--card); border: 1px solid var(--border); color: var(--text); padding: .5rem .7rem; border-radius: var(--radius); cursor: pointer; font-size: 1.2rem; }
@@ -44,7 +175,7 @@ a:hover { color: var(--accent); }
 .nav-links a:hover, .nav-links a.active { background: var(--card); color: var(--accent); }
 .nav-links a.active { border-left: 3px solid var(--accent); }
 
-.main { margin-left: 240px; padding: 2rem 3rem; max-width: 1200px; }
+.main { margin-left: 240px; padding: 2rem 3rem; max-width: 1200px; position: relative; z-index: 1; }
 
 /* ── Calendar ── */
 .cal-header {
@@ -66,25 +197,94 @@ a:hover { color: var(--accent); }
 }
 .cal-day {
   aspect-ratio: 1; max-height: 90px;
-  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+  background: radial-gradient(circle at 50% 40%, rgba(255,215,0,.08) 0%, transparent 70%), var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  cursor: pointer; transition: all .2s; position: relative; overflow: hidden;
+  cursor: pointer; transition: all .3s; position: relative; overflow: hidden;
 }
-.cal-day:hover { border-color: var(--accent); transform: translateY(-2px); }
+.cal-day::before {
+  content: '';
+  position: absolute;
+  width: 4px; height: 4px;
+  background: var(--star-dim);
+  border-radius: 50%;
+  top: 25%;
+  left: calc(50% - 2px);
+  transition: all .4s;
+  box-shadow: 0 0 0px var(--star-dim);
+}
+.cal-day:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(255,215,0,.15);
+}
+.cal-day:hover::before {
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent), 0 0 16px var(--accent);
+}
 .cal-day.empty { background: transparent; border-color: transparent; cursor: default; }
-.cal-day.empty:hover { transform: none; border-color: transparent; }
-.cal-day .day-num { font-size: 1.1rem; font-weight: 700; }
-.cal-day .day-status { font-size: .7rem; margin-top: .2rem; }
+.cal-day.empty:hover { transform: none; border-color: transparent; box-shadow: none; }
+.cal-day.empty::before { display: none; }
+.cal-day .day-num { font-size: 1.1rem; font-weight: 700; position: relative; z-index: 1; }
+.cal-day .day-status { font-size: .7rem; margin-top: .2rem; position: relative; z-index: 1; }
 .cal-day .day-thumb {
   position: absolute; inset: 0; object-fit: cover; opacity: .3;
   border-radius: var(--radius);
 }
-.cal-day.status-done { border-color: var(--green); }
-.cal-day.status-generating { border-color: var(--orange); animation: pulse 1.5s infinite; }
+.cal-day.status-done {
+  border-color: var(--green);
+  box-shadow: 0 0 12px rgba(74,222,128,.15);
+}
+.cal-day.status-done::before {
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green), 0 0 12px var(--green);
+  width: 5px; height: 5px;
+  left: calc(50% - 2.5px);
+}
+.cal-day.status-generating {
+  border-color: var(--orange);
+  animation: pulse 1.5s infinite;
+  box-shadow: 0 0 16px rgba(251,146,60,.2);
+}
+.cal-day.status-generating::before {
+  background: var(--orange);
+  box-shadow: 0 0 8px var(--orange), 0 0 16px var(--orange);
+  width: 5px; height: 5px;
+  left: calc(50% - 2.5px);
+}
 .cal-day.status-failed { border-color: var(--red); }
 .cal-day.status-empty { opacity: .5; }
+.cal-day.status-empty::before { background: var(--muted); box-shadow: none; }
+
+/* Constellation Canvas on Calendar */
+#constellation-canvas {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
 
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+
+/* ── Toast notification ── */
+.toast {
+  position: fixed;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--card);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  padding: .75rem 1.5rem;
+  border-radius: 24px;
+  z-index: 1000;
+  font-size: .9rem;
+  box-shadow: 0 0 20px rgba(255,215,0,.2);
+  animation: toast-in .4s ease-out, toast-out .4s 2.6s ease-in forwards;
+}
+@keyframes toast-in  { from { opacity:0; transform:translateX(-50%) translateY(20px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
+@keyframes toast-out { to   { opacity:0; transform:translateX(-50%) translateY(-20px); } }
 
 /* ── Day Detail ── */
 .hidden { display: none !important; }

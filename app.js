@@ -1,4 +1,4 @@
-// SparkArt Asset Manager — app.js
+// Star — Asset Manager with Constellation Gimmicks
 const CDN = '/cdn/star';
 let manifest = null;
 let currentYear, currentMonth;
@@ -9,13 +9,266 @@ document.addEventListener('DOMContentLoaded', () => {
   setupSidebar();
   setupNav();
   setupDaySelector();
+  initStarfield();
+  startShootingStars();
+  setupCreateStar();
   const now = new Date();
   currentYear = now.getFullYear();
   currentMonth = now.getMonth();
-  loadManifest().then(() => renderCalendar());
+  loadManifest().then(() => {
+    renderCalendar();
+    updateStarCounter();
+    updateStarOfDay();
+    drawConstellation();
+  });
   handleHash();
   window.addEventListener('hashchange', handleHash);
+  window.addEventListener('resize', () => {
+    resizeStarfield();
+    drawConstellation();
+  });
 });
+
+// ═══════════════════════════════════════════
+// 🎨 Starfield Canvas
+// ═══════════════════════════════════════════
+let stars = [];
+let starCanvas, starCtx;
+let animFrame;
+
+function initStarfield() {
+  starCanvas = document.getElementById('starfield');
+  starCtx = starCanvas.getContext('2d');
+  resizeStarfield();
+  generateStars(200);
+  animateStarfield();
+}
+
+function resizeStarfield() {
+  starCanvas.width = window.innerWidth;
+  starCanvas.height = window.innerHeight;
+}
+
+function generateStars(count) {
+  stars = [];
+  for (let i = 0; i < count; i++) {
+    stars.push({
+      x: Math.random() * starCanvas.width,
+      y: Math.random() * starCanvas.height,
+      r: Math.random() * 1.8 + .3,
+      twinkle: Math.random() * Math.PI * 2,
+      twinkleSpeed: Math.random() * .02 + .005,
+      opacity: Math.random() * .5 + .3
+    });
+  }
+}
+
+function animateStarfield() {
+  starCtx.clearRect(0, 0, starCanvas.width, starCanvas.height);
+  stars.forEach(s => {
+    s.twinkle += s.twinkleSpeed;
+    const alpha = s.opacity + Math.sin(s.twinkle) * .2;
+    starCtx.beginPath();
+    starCtx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    starCtx.fillStyle = `rgba(200,210,255,${Math.max(.1, alpha)})`;
+    starCtx.fill();
+    // glow for bigger stars
+    if (s.r > 1.2) {
+      starCtx.beginPath();
+      starCtx.arc(s.x, s.y, s.r * 2.5, 0, Math.PI * 2);
+      starCtx.fillStyle = `rgba(255,215,0,${Math.max(0, alpha * .15)})`;
+      starCtx.fill();
+    }
+  });
+  animFrame = requestAnimationFrame(animateStarfield);
+}
+
+// ═══════════════════════════════════════════
+// 💫 Shooting Stars
+// ═══════════════════════════════════════════
+function startShootingStars() {
+  const shoot = () => {
+    triggerShootingStar();
+    // Random interval: 8-20 seconds
+    setTimeout(shoot, Math.random() * 12000 + 8000);
+  };
+  // First one after 3s
+  setTimeout(shoot, 3000);
+}
+
+function triggerShootingStar() {
+  const el = document.getElementById('shooting-star');
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  // Start from top-right quadrant
+  const startX = w * .5 + Math.random() * w * .5;
+  const startY = Math.random() * h * .3;
+  el.style.left = startX + 'px';
+  el.style.top = startY + 'px';
+  el.classList.remove('fly');
+  void el.offsetWidth; // force reflow
+  el.classList.add('fly');
+}
+
+// ═══════════════════════════════════════════
+// 🌟 Create Star Button
+// ═══════════════════════════════════════════
+function setupCreateStar() {
+  document.getElementById('create-star-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('create-star-btn');
+    btn.textContent = '⏳ กำลังสร้าง...';
+    btn.disabled = true;
+
+    // Trigger shooting star as visual feedback
+    triggerShootingStar();
+
+    // Try API first, fallback to demo
+    try {
+      const res = await fetch('/api/regenerate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: new Date().toISOString().slice(0,10), template: 'default' })
+      });
+      if (res.ok) {
+        showToast('🌟 กำลังสร้างดาวดวงใหม่...');
+        // Poll for completion
+        setTimeout(async () => {
+          await loadManifest();
+          renderCalendar();
+          updateStarCounter();
+          updateStarOfDay();
+          drawConstellation();
+        }, 8000);
+      } else {
+        showToast('⚠️ API ยังไม่พร้อม — แต่ดาวก็ยังสวย!');
+      }
+    } catch {
+      showToast('✨ พรุ่งนี้เช้ามาดูดาวใหม่นะ!');
+    }
+
+    setTimeout(() => {
+      btn.textContent = '✨ สร้างดาว';
+      btn.disabled = false;
+    }, 3000);
+  });
+}
+
+// ═══════════════════════════════════════════
+// 📊 Star Counter
+// ═══════════════════════════════════════════
+function updateStarCounter() {
+  const el = document.getElementById('star-count');
+  if (!manifest || !manifest.days) return;
+  const count = manifest.days.filter(d => d.status === 'done').length;
+  // Animate counter
+  const current = parseInt(el.textContent) || 0;
+  animateNumber(el, current, count, 800);
+}
+
+function animateNumber(el, from, to, duration) {
+  const start = performance.now();
+  const step = (now) => {
+    const progress = Math.min((now - start) / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+    el.textContent = Math.round(from + (to - from) * eased);
+    if (progress < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+// ═══════════════════════════════════════════
+// 🌟 Star of the Day
+// ═══════════════════════════════════════════
+function updateStarOfDay() {
+  const el = document.getElementById('star-of-day');
+  const today = new Date().toISOString().slice(0, 10);
+  const day = manifest && manifest.days ? manifest.days.find(d => d.date === today) : null;
+
+  if (day && day.status === 'done') {
+    const scripts = day.days ? Object.keys(day.days).filter(k => day.days[k]).length : 7;
+    el.classList.add('has-star');
+    el.querySelector('.sod-text').textContent = `วันนี้ ${formatDate(today)} · ${scripts}/7 scripts`;
+    el.querySelector('.sod-icon').textContent = '⭐';
+  } else {
+    el.classList.remove('has-star');
+    el.querySelector('.sod-text').textContent = 'Star of the Day';
+    el.querySelector('.sod-icon').textContent = '🌙';
+  }
+}
+
+// ═══════════════════════════════════════════
+// 🔗 Constellation Lines
+// ═══════════════════════════════════════════
+function drawConstellation() {
+  // Only when calendar view is visible
+  if (document.getElementById('calendar-view').classList.contains('hidden')) return;
+
+  let canvas = document.getElementById('constellation-canvas');
+  // Create if not exists
+  if (!canvas) {
+    canvas = document.createElement('canvas');
+    canvas.id = 'constellation-canvas';
+    const calSection = document.getElementById('calendar-view');
+    calSection.style.position = 'relative';
+    calSection.appendChild(canvas);
+  }
+
+  const grid = document.getElementById('cal-grid');
+  const rect = grid.getBoundingClientRect();
+  canvas.width = rect.width;
+  canvas.height = rect.height;
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = rect.height + 'px';
+  canvas.style.top = (rect.top - grid.parentElement.getBoundingClientRect().top) + 'px';
+  canvas.style.left = (rect.left - grid.parentElement.getBoundingClientRect().left) + 'px';
+
+  const ctx = canvas.getContext('2d');
+  const cells = grid.querySelectorAll('.cal-day.status-done');
+  if (cells.length < 2) return;
+
+  // Collect star positions
+  const points = [];
+  cells.forEach(cell => {
+    const cr = cell.getBoundingClientRect();
+    points.push({
+      x: cr.left - rect.left + cr.width / 2,
+      y: cr.top - rect.top + cr.height / 2,
+    });
+  });
+
+  // Draw constellation lines between nearby stars
+  ctx.strokeStyle = 'rgba(255,215,0,.12)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < points.length; i++) {
+    for (let j = i + 1; j < points.length; j++) {
+      const dx = points[i].x - points[j].x;
+      const dy = points[i].y - points[j].y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      // Only connect stars within reasonable distance
+      if (dist < 200) {
+        const alpha = Math.max(0, (1 - dist / 200) * .3);
+        ctx.strokeStyle = `rgba(255,215,0,${alpha})`;
+        ctx.beginPath();
+        ctx.moveTo(points[i].x, points[i].y);
+        ctx.lineTo(points[j].x, points[j].y);
+        ctx.stroke();
+      }
+    }
+  }
+}
+
+// ═══════════════════════════════════════════
+// 🍞 Toast
+// ═══════════════════════════════════════════
+function showToast(msg) {
+  const existing = document.querySelector('.toast');
+  if (existing) existing.remove();
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3200);
+}
 
 // ── Sidebar ──
 function setupSidebar() {
@@ -362,6 +615,7 @@ document.getElementById('back-btn').addEventListener('click', () => {
   window.location.hash = '';
   document.getElementById('detail-view').classList.add('hidden');
   document.getElementById('calendar-view').classList.remove('hidden');
+  setTimeout(drawConstellation, 100);
 });
 
 // ── Hash routing ──
@@ -373,6 +627,7 @@ function handleHash() {
   } else {
     document.getElementById('detail-view').classList.add('hidden');
     document.getElementById('calendar-view').classList.remove('hidden');
+    setTimeout(drawConstellation, 100);
   }
 }
 
