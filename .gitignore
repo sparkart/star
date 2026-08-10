@@ -1,0 +1,6 @@
+.htpasswd
+sync-cdn.sh
+cdn/
+content/scripts/
+content/raw/
+content/horoscope/

@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>📘 SparkArt Guidebook</title>
+  <link rel="stylesheet" href="/shared.css">
+  <meta name="robots" content="noindex">
+</head>
+<body>
+
+<button class="hamburger" id="hamburger" aria-label="Toggle sidebar" aria-expanded="false">☰</button>
+
+<aside class="sidebar" id="sidebar">
+  <a href="/" class="brand">✨ SparkArt</a>
+  <ul class="nav-links">
+    <li><a href="/">🏠 Home</a></li>
+    <li><a href="/howto/" class="active">📚 Guidebook</a></li>
+    <li><a href="/content/">📊 Content</a></li>
+    <li><a href="/automation/">🤖 Automation</a></li>
+  </ul>
+  <div class="sub-nav" id="subNav"></div>
+</aside>
+
+<main class="main">
+
+<h1>📘 SparkArt Guidebook</h1>
+<p><em>คู่มือฉบับสมบูรณ์ — ระบบผลิตคอนเทนต์ดูดวงอัตโนมัติด้วย AI</em></p>
+
+<hr>
+
+<h2 id="overview">📊 ภาพรวม</h2>
+<p>SparkArt คือระบบผลิตคอนเทนต์ดูดวงอัตโนมัติ (AI Horoscope Affiliate Pipeline) ที่ใช้ Swiss Ephemeris คำนวณตำแหน่งดาวจริง + AI เขียนบทภาษาไทย + TTS แปลงเป็นเสียงพากย์ โดยมีเป้าหมายสร้างรายได้จาก Affiliate แบบไม่ต้องทำคอนเทนต์เองทุกวัน</p>
+
+<p><strong>องค์ประกอบหลัก:</strong></p>
+<ul>
+  <li>🔮 <strong>Astrology Engine</strong> — คำนวณดวงด้วย Swiss Ephemeris (pyswisseph)</li>
+  <li>⚙️ <strong>AI Pipeline</strong> — DeepSeek/Claude เขียนบท + Google Chirp3 TTS</li>
+  <li>🎬 <strong>Video Pipeline</strong> — CapCut automation + FFmpeg render</li>
+  <li>💰 <strong>Monetization</strong> — Affiliate links + โซเชียลมีเดีย</li>
+</ul>
+
+<h2 id="astro-engine">🔮 Astrology Engine</h2>
+<p>หัวใจของระบบคือการคำนวณดวงที่แม่นยำระดับวิทยาศาสตร์ด้วย <strong>Swiss Ephemeris</strong> ซึ่งเป็นไลบรารีมาตรฐานที่นักโหราศาสตร์มืออาชีพใช้ทั่วโลก</p>
+
+<h3>สิ่งที่คำนวณได้</h3>
+<ul>
+  <li>ตำแหน่งดาว 10 ดวง (อาทิตย์ จันทร์ อังคาร พุธ เสาร์ ราหู ฯลฯ)</li>
+  <li>ราศีที่ดาวสถิต (Aries, Taurus, ... Pisces)</li>
+  <li>เรือนที่ดาวอยู่ (House 1-12)</li>
+  <li>Aspects ระหว่างดาว (Conjunction, Trine, Square, Opposition)</li>
+  <li>คะแนน 4 ด้าน: การงาน, การเงิน, ความรัก, สุขภาพ</li>
+</ul>
+
+<h3>ไฟล์สำคัญ</h3>
+<ul>
+  <li><code>astro_daily_pro.py</code> — คำนวณดวงรายวันจาก Swiss Ephemeris</li>
+  <li><code>daily_horoscope_v2.py</code> — แปลงข้อมูลดาราศาสตร์เป็นคะแนน 4 ด้าน 7 วันเกิด</li>
+</ul>
+
+<h2 id="ai-pipeline">⚙️ AI Pipeline</h2>
+<p>เมื่อได้ข้อมูลดวงแล้ว ขั้นตอนต่อไปคือการแปลงเป็นบทภาษาไทยที่อ่านสนุกและเป็นธรรมชาติ</p>
+
+<h3>AI Writer</h3>
+<ul>
+  <li><strong>DeepSeek (หลัก)</strong> — <code>horoscope_ai_writer_v2.py</code> เขียนบทภาษาไทย ต้นทุน ~฿0.016/บท</li>
+  <li><strong>Claude (พรีเมียม)</strong> — <code>ai_writer_claude.py</code> คุณภาพสูงกว่า แต่ต้นทุนสูงกว่า</li>
+  <li><strong>Fallback</strong> — template สำรองกรณี API ล่ม</li>
+</ul>
+
+<h3>TTS (Text-to-Speech)</h3>
+<ul>
+  <li><strong>Google Chirp3 HD</strong> — เสียงไทยธรรมชาติ ฟังแล้วไม่รู้ว่า AI</li>
+  <li>ปรับ speaking_rate ได้ (0.85-1.05) ให้ฟัง "เคลิ้ม"</li>
+</ul>
+
+<h2 id="brand-strategy">🎯 Brand Strategy</h2>
+<p>การสร้างแบรนด์ดูดวงให้แตกต่างจากคู่แข่ง ด้วยจุดแข็ง "แม่นด้วยวิทยาศาสตร์" ไม่ใช่ "มโนแบบหมอดู"</p>
+
+<h3>จุดขาย</h3>
+<ul>
+  <li>ใช้ Swiss Ephemeris จริง — ไม่ใช่ Random</li>
+  <li>AI เขียนบทเฉพาะบุคคล — ไม่ใช่ Template ซ้ำ</li>
+  <li>เสียงพากย์ธรรมชาติ — ไม่ใช่ TTS หุ่นยนต์</li>
+  <li>ผลิตอัตโนมัติ — สเกลได้ไม่จำกัด</li>
+</ul>
+
+<h3>กลุ่มเป้าหมาย</h3>
+<ul>
+  <li>สายมู Gen Y/Z — ดูดวงใน TikTok/YouTube Shorts</li>
+  <li>คนทำงาน — ดูดวงการงาน/การเงินรายวัน</li>
+  <li>คนไทยในต่างประเทศ — เนื้อหาภาษาไทย</li>
+</ul>
+
+<h2 id="monetization">💰 Monetization</h2>
+<p>โมเดลรายได้ของ SparkArt มีหลายชั้น:</p>
+
+<h3>ชั้นที่ 1: Affiliate (ปัจจุบัน)</h3>
+<ul>
+  <li>แทรกลิงก์สินค้ามงคลในวิดีโอ (กำไลหิน, สร้อย, เครื่องราง)</li>
+  <li>Shopee/TikTok Affiliate</li>
+  <li>รายได้ต่อวิดีโอ: ~฿50-500 ขึ้นอยู่กับยอดวิว</li>
+</ul>
+
+<h3>ชั้นที่ 2: โซเชียลมีเดีย (เร็วๆ นี้)</h3>
+<ul>
+  <li>YouTube Shorts — monetization จากยอดวิว</li>
+  <li>TikTok Creator Fund</li>
+  <li>LINE OA — subscription รายเดือน</li>
+</ul>
+
+<h3>ชั้นที่ 3: Licensing (อนาคต)</h3>
+<ul>
+  <li>ขาย API ให้เว็บดูดวงอื่น</li>
+  <li>White-label ให้เอเจนซี่</li>
+</ul>
+
+<h2 id="architecture">🏗️ Architecture</h2>
+<p>โครงสร้างระบบทั้งหมด:</p>
+
+<pre><code>┌─────────────────────────────────┐
+│   Swiss Ephemeris (pyswisseph)  │
+│   → astro_daily_pro.py          │
+└──────────┬──────────────────────┘
+           ▼
+┌─────────────────────────────────┐
+│   Data Processor                │
+│   → daily_horoscope_v2.py       │
+│   → 4 scores + 7 birthdays      │
+└──────────┬──────────────────────┘
+           ▼
+┌─────────────────────────────────┐
+│   AI Writer                     │
+│   → horoscope_ai_writer_v2.py   │
+│   → DeepSeek / Claude           │
+└──────────┬──────────────────────┘
+           ▼
+┌─────────────────────────────────┐
+│   TTS Engine                    │
+│   → Google Chirp3 HD            │
+│   → MP3 output                  │
+└──────────┬──────────────────────┘
+           ▼
+┌─────────────────────────────────┐
+│   Video Render                  │
+│   → CapCut JSON → cutcli → MP4  │
+└──────────┬──────────────────────┘
+           ▼
+┌─────────────────────────────────┐
+│   Publish                       │
+│   → YouTube / TikTok / LINE     │
+└─────────────────────────────────┘</code></pre>
+
+<h2 id="growth">📈 Growth</h2>
+<p>แผนการเติบโตใน 6-12 เดือน:</p>
+
+<ol>
+  <li><strong>Bulk Generation</strong> — ผลิต 180 วัน × 7 วันเกิด = 1,260 วิดีโอ ต่อเดือน</li>
+  <li><strong>Multi-Voice</strong> — ใช้เสียง Chirp3 หลายแบบ ลด pattern detection</li>
+  <li><strong>Auto-Upload</strong> — Publish อัตโนมัติไปทุกแพลตฟอร์ม</li>
+  <li><strong>A/B Testing</strong> — ทดลอง hook/thumbnail หลายแบบ หา best performer</li>
+  <li><strong>Analytics Dashboard</strong> — ติดตามยอดวิว รายได้ ต่อวิดีโอ</li>
+</ol>
+
+<h2 id="faq">❓ FAQ</h2>
+
+<h3>ทำไมต้องใช้ Swiss Ephemeris?</h3>
+<p>เพราะเป็นไลบรารีดาราศาสตร์มาตรฐานที่ NASA และนักโหราศาสตร์มืออาชีพใช้ — คำนวณตำแหน่งดาวแม่นระดับวินาที ไม่ใช่ Random เหมือนเว็บดูดวงทั่วไป</p>
+
+<h3>ใช้ AI อะไรเขียนบท?</h3>
+<p>ปัจจุบันใช้ DeepSeek เป็นหลัก (ถูกมาก ~฿0.016/บท) และกำลังทดลอง Claude สำหรับบทคุณภาพสูง ระบบมี fallback template กรณี API ล่ม</p>
+
+<h3>เสียงพากย์ธรรมชาติแค่ไหน?</h3>
+<p>Google Chirp3 HD เป็น TTS ที่ดีที่สุดสำหรับภาษาไทย — คนฟังไม่รู้ว่าเป็น AI ถ้าไม่บอกล่วงหน้า</p>
+
+<h3>ต้องลงทุนเท่าไหร่?</h3>
+<p>ต้นทุนต่ำมาก: DeepSeek ~฿0.016/บท + TTS ~฿0.02/นาที + Render ~฿0.01/วิดีโอ = <strong>~฿0.30/วิดีโอ</strong> — คุ้มทุนตั้งแต่เดือนแรก</p>
+
+<h3>เผยแพร่ที่ไหน?</h3>
+<p>YouTube Shorts, TikTok, LINE OA, Facebook — ครบทุกแพลตฟอร์มใน pipeline เดียว</p>
+
+</main>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const hamburger = document.getElementById('hamburger');
+  const sidebar = document.getElementById('sidebar');
+  const subNav = document.getElementById('subNav');
+  
+  hamburger.addEventListener('click', function() {
+    const isOpen = sidebar.classList.toggle('sidebar-open');
+    hamburger.setAttribute('aria-expanded', isOpen);
+  });
+  
+  if (subNav) {
+    document.querySelectorAll('.main h2[id], .main h3[id]').forEach(function(heading) {
+      var link = document.createElement('a');
+      link.href = '#' + heading.id;
+      link.textContent = heading.textContent;
+      link.className = heading.tagName === 'H2' ? 'sub-main' : 'sub-child';
+      subNav.appendChild(link);
+    });
+  }
+  
+  var sections = document.querySelectorAll('.main h2[id]');
+  if (sections.length) {
+    var observer = new IntersectionObserver(function(entries) {
+      entries.forEach(function(entry) {
+        if (entry.isIntersecting) {
+          var id = entry.target.id;
+          var links = document.querySelectorAll('.sub-nav a');
+          links.forEach(function(l) { l.classList.remove('active'); });
+          var active = document.querySelector('.sub-nav a[href="#' + id + '"]');
+          if (active) active.classList.add('active');
+        }
+      });
+    }, { rootMargin: '-40% 0px -40% 0px' });
+    sections.forEach(function(sec) { observer.observe(sec); });
+  }
+});
+</script>
+
+</body>
+</html>

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>⚡ SparkArt — Asset Manager</title>
+<link rel="stylesheet" href="style.css">
+<meta name="robots" content="noindex">
+</head>
+<body>
+
+<!-- Sidebar -->
+<button class="hamburger" id="hamburger" aria-label="Toggle sidebar" aria-expanded="false">☰</button>
+<aside class="sidebar" id="sidebar">
+  <a href="/" class="brand">✨ SparkArt</a>
+  <div class="nav-links">
+    <a href="/" class="active">📅 Calendar</a>
+    <a href="/howto/">📘 Guidebook</a>
+  </div>
+  <div class="sub-nav" id="subNav"></div>
+</aside>
+
+<!-- Main -->
+<main class="main" id="app">
+
+  <!-- Calendar View -->
+  <section id="calendar-view">
+    <div class="cal-header">
+      <button id="prev-month">◀</button>
+      <h1 id="month-title">August 2026</h1>
+      <button id="next-month">▶</button>
+    </div>
+    <div class="cal-grid" id="cal-grid">
+      <div class="cal-day-header">อา</div>
+      <div class="cal-day-header">จ</div>
+      <div class="cal-day-header">อ</div>
+      <div class="cal-day-header">พ</div>
+      <div class="cal-day-header">พฤ</div>
+      <div class="cal-day-header">ศ</div>
+      <div class="cal-day-header">ส</div>
+    </div>
+    <div id="loading" class="loading">กำลังโหลด...</div>
+  </section>
+
+  <!-- Day Detail View (hidden) -->
+  <section id="detail-view" class="hidden">
+    <button id="back-btn">← กลับ</button>
+    <h1 id="detail-date"></h1>
+    <div class="detail-status" id="detail-status"></div>
+
+    <!-- Video preview -->
+    <div class="video-preview" id="video-preview">
+      <video id="video-player" controls crossorigin="anonymous">
+        <source src="" type="video/mp4">
+      </video>
+      <div class="no-video hidden" id="no-video">ยังไม่มีวิดีโอ</div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab active" data-tab="script">📝 Script</button>
+      <button class="tab" data-tab="audio">🎤 Audio</button>
+      <button class="tab" data-tab="meta">ℹ️ Meta</button>
+    </div>
+
+    <!-- Tab panels -->
+    <div class="tab-panel active" id="panel-script">
+      <div class="script-toolbar">
+        <button id="edit-btn">✏️ Edit</button>
+        <button id="save-btn" class="hidden">💾 Save</button>
+        <button id="cancel-btn" class="hidden">✖ Cancel</button>
+      </div>
+      <pre id="script-display"></pre>
+      <textarea id="script-editor" class="hidden"></textarea>
+      <div id="script-status" class="status-msg"></div>
+    </div>
+
+    <div class="tab-panel" id="panel-audio">
+      <audio id="audio-player" controls crossorigin="anonymous">
+        <source src="" type="audio/mpeg">
+      </audio>
+      <div class="no-audio hidden" id="no-audio">ยังไม่มีเสียงพากย์</div>
+    </div>
+
+    <div class="tab-panel" id="panel-meta">
+      <table id="meta-table"></table>
+    </div>
+
+    <!-- Actions -->
+    <div class="detail-actions">
+      <button id="regen-btn">🔄 Regenerate</button>
+      <button id="download-video" class="hidden">⬇ Download Video</button>
+      <button id="download-audio" class="hidden">⬇ Download Audio</button>
+    </div>
+    <div id="regen-status" class="status-msg"></div>
+  </section>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🤖 SparkArt Automation</title>
+  <link rel="stylesheet" href="/shared.css">
+  <meta name="robots" content="noindex">
+</head>
+<body>
+
+<button class="hamburger" id="hamburger" aria-label="Toggle sidebar" aria-expanded="false">☰</button>
+
+<aside class="sidebar" id="sidebar">
+  <a href="/" class="brand">✨ SparkArt</a>
+  <ul class="nav-links">
+    <li><a href="/">🏠 Home</a></li>
+    <li><a href="/howto/">📚 Guidebook</a></li>
+    <li><a href="/content/">📊 Content</a></li>
+    <li><a href="/automation/" class="active">🤖 Automation</a></li>
+  </ul>
+  <div class="sub-nav" id="subNav"></div>
+</aside>
+
+<main class="main">
+
+<h1>🤖 Automation Pipeline</h1>
+<p><em>วิเคราะห์แนวโน้ม Automation ในธุรกิจ Affiliate Content Creator — 10 สิงหาคม 2026</em></p>
+
+<hr>
+
+<h2 id="summary">📋 สรุปภาพรวม</h2>
+
+<p>Pipeline ทำงานแบบ <strong>single-date</strong> (1 วันต่อครั้ง) ผ่าน 3 สคริปต์:</p>
+<ul>
+  <li><code>astro_daily_pro.py</code> → คำนวณดวงจาก Swiss Ephemeris</li>
+  <li><code>daily_horoscope_v2.py</code> → แปลงข้อมูลเป็นคะแนน 4 ด้าน 7 วันเกิด</li>
+  <li><code>horoscope_ai_writer_v2.py</code> → DeepSeek เขียนบทภาษาไทย</li>
+</ul>
+
+<p><strong>Publish:</strong> YouTube ✅ | Facebook ✅ | LINE OA ✅ | TikTok ❌ (manual) | Shopee ⚠️</p>
+
+<h2 id="production">1. การผลิตอัตโนมัติ</h2>
+
+<h3 id="ai-writing">AI Script Writing</h3>
+<table>
+  <tr><th>องค์ประกอบ</th><th>สถานะ</th><th>รายละเอียด</th></tr>
+  <tr><td>Swiss Ephemeris</td><td>✅ Prod</td><td>คำนวณดาว 10 ดวง + ราศี + Aspects</td></tr>
+  <tr><td>DeepSeek Writer</td><td>⚠️ Semi</td><td>เขียนได้ แต่ emoji หลุด อังกฤษปน</td></tr>
+  <tr><td>Claude Writer</td><td>🧪 Test</td><td>คุณภาพสูง ต้นทุนสูงกว่า</td></tr>
+  <tr><td>Fallback</td><td>❌ Missing</td><td>ไม่มี template สำรอง</td></tr>
+  <tr><td>Post-processing</td><td>❌ None</td><td>ไม่กรอง emoji/ภาษาอังกฤษ</td></tr>
+</table>
+
+<h3 id="tts-stack">TTS</h3>
+<table>
+  <tr><th>องค์ประกอบ</th><th>สถานะ</th><th>รายละเอียด</th></tr>
+  <tr><td>Google Chirp3 HD</td><td>🧪 Tested</td><td>เสียงไทยธรรมชาติ</td></tr>
+  <tr><td>Bulk TTS</td><td>❌ Not built</td><td>ยังไม่มี batch generation</td></tr>
+  <tr><td>Voice variety</td><td>❌ Single</td><td>ใช้เสียงเดียวทั้ง 7 วันเกิด</td></tr>
+</table>
+
+<h3 id="video-edit">Video Auto-Edit</h3>
+<table>
+  <tr><th>องค์ประกอบ</th><th>สถานะ</th><th>รายละเอียด</th></tr>
+  <tr><td>CapCut Automation</td><td>🧪 Spec done</td><td>ยังไม่ implement</td></tr>
+  <tr><td>FFmpeg</td><td>✅ Ready</td><td>Render headless ได้</td></tr>
+  <tr><td>Video templates</td><td>❌ None</td><td>ยังไม่มี background</td></tr>
+</table>
+
+<h2 id="near-future">🔮 Near Future (6-12 เดือน)</h2>
+
+<table>
+  <tr><th>Feature</th><th>Impact</th></tr>
+  <tr><td>Multi-Agent Pipeline (DeepSeek draft + Claude polish)</td><td>🔥🔥🔥</td></tr>
+  <tr><td>Quality Agent (auto-check emoji/ภาษา/ความยาว)</td><td>🔥🔥🔥</td></tr>
+  <tr><td>Prompt Variation Pool (20+ hooks)</td><td>🔥🔥</td></tr>
+  <tr><td>Bulk overnight render (1,260 videos/เดือน)</td><td>🔥🔥🔥</td></tr>
+  <tr><td>Platform-specific formats (TikTok/YT/FB)</td><td>🔥🔥🔥</td></tr>
+  <tr><td>Real-time QC Dashboard</td><td>🔥</td></tr>
+</table>
+
+<h2 id="actions">🎯 Recommended Actions</h2>
+
+<ol>
+  <li><strong>ทันที:</strong> เพิ่ม post-processing — strip emoji, แปลศัพท์ (Conjunction→โคจรประชิด)</li>
+  <li><strong>สัปดาห์นี้:</strong> เพิ่ม fallback template ใช้ astro data จริง</li>
+  <li><strong>เดือนนี้:</strong> สร้าง prompt variation pool 20+ hooks</li>
+  <li><strong>เดือนหน้า:</strong> ทดลอง 2-stage: DeepSeek draft → Claude polish</li>
+</ol>
+
+</main>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const hamburger = document.getElementById('hamburger');
+  const sidebar = document.getElementById('sidebar');
+  const subNav = document.getElementById('subNav');
+  
+  hamburger.addEventListener('click', function() {
+    const isOpen = sidebar.classList.toggle('sidebar-open');
+    hamburger.setAttribute('aria-expanded', isOpen);
+  });
+  
+  if (subNav) {
+    document.querySelectorAll('.main h2[id], .main h3[id]').forEach(function(heading) {
+      var link = document.createElement('a');
+      link.href = '#' + heading.id;
+      link.textContent = heading.textContent;
+      link.className = heading.tagName === 'H2' ? 'sub-main' : 'sub-child';
+      subNav.appendChild(link);
+    });
+  }
+  
+  var sections = document.querySelectorAll('.main h2[id], .main h3[id]');
+  if (sections.length) {
+    var observer = new IntersectionObserver(function(entries) {
+      entries.forEach(function(entry) {
+        if (entry.isIntersecting) {
+          var id = entry.target.id;
+          var links = document.querySelectorAll('.sub-nav a');
+          links.forEach(function(l) { l.classList.remove('active'); });
+          var active = document.querySelector('.sub-nav a[href="#' + id + '"]');
+          if (active) active.classList.add('active');
+        }
+      });
+    }, { rootMargin: '-40% 0px -40% 0px' });
+    sections.forEach(function(sec) { observer.observe(sec); });
+  }
+});
+</script>
+
+</body>
+</html>

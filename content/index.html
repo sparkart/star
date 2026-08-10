@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>📊 SparkArt Content API</title>
+  <link rel="stylesheet" href="/shared.css">
+  <meta name="robots" content="noindex">
+</head>
+<body>
+
+<button class="hamburger" id="hamburger" aria-label="Toggle sidebar" aria-expanded="false">☰</button>
+
+<aside class="sidebar" id="sidebar">
+  <a href="/" class="brand">✨ SparkArt</a>
+  <ul class="nav-links">
+    <li><a href="/">🏠 Home</a></li>
+    <li><a href="/howto/">📚 Guidebook</a></li>
+    <li><a href="/content/" class="active">📊 Content</a></li>
+    <li><a href="/automation/">🤖 Automation</a></li>
+  </ul>
+  <div class="sub-nav" id="subNav"></div>
+</aside>
+
+<main class="main">
+
+<h1>📊 Content & API Insights</h1>
+<p><em>สถิติการผลิตคอนเทนต์อัตโนมัติและ API Endpoints</em></p>
+
+<hr>
+
+<h2 id="stats">📈 Production Stats</h2>
+
+<table>
+  <tr><th>Metric</th><th>Value</th></tr>
+  <tr><td>📝 Content Scripts</td><td><strong>217</strong> บท</td></tr>
+  <tr><td>📅 Days Covered</td><td><strong>31</strong> วัน</td></tr>
+  <tr><td>🎤 TTS Audio</td><td><strong>พร้อมสำหรับ production</strong></td></tr>
+  <tr><td>🎬 Video Ready</td><td><strong>รอ CapCut batch</strong></td></tr>
+  <tr><td>💲 Cost/Day</td><td><strong>~฿0.30/วิดีโอ</strong></td></tr>
+  <tr><td>⚡ Generation Time</td><td><strong>~3 วิ/บท (DeepSeek)</strong></td></tr>
+  <tr><td>☁️ Storage</td><td><strong>star.panupong.net/content/</strong></td></tr>
+</table>
+
+<h2 id="api">🔌 API Endpoints</h2>
+
+<table>
+  <tr><th>Endpoint</th><th>Method</th><th>Description</th></tr>
+  <tr><td><code>/content/</code></td><td>GET</td><td>หน้านี้ — สถิติ + API docs</td></tr>
+  <tr><td><code>/content/registry.db</code></td><td>—</td><td>SQLite database — metadata ทั้งหมด</td></tr>
+  <tr><td><code>/content/scripts/</code></td><td>—</td><td>บทพากย์ทั้ง 217 ไฟล์</td></tr>
+  <tr><td><code>/content/json/</code></td><td>—</td><td>ข้อมูลดวงในรูปแบบ JSON</td></tr>
+</table>
+
+<h2 id="how-it-works">⚙️ How It Works</h2>
+
+<pre><code>
+POST /compute  → Swiss Ephemeris คำนวณดวง
+     ↓
+POST /generate → AI (DeepSeek/Claude) เขียนบท
+     ↓
+POST /tts      → Google Chirp3 HD สร้างเสียง
+     ↓
+POST /render   → CapCut ประกอบวิดีโอ
+     ↓
+POST /publish  → YouTube/TikTok/LINE
+</code></pre>
+
+</main>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const hamburger = document.getElementById('hamburger');
+  const sidebar = document.getElementById('sidebar');
+  const subNav = document.getElementById('subNav');
+  
+  hamburger.addEventListener('click', function() {
+    const isOpen = sidebar.classList.toggle('sidebar-open');
+    hamburger.setAttribute('aria-expanded', isOpen);
+  });
+  
+  if (subNav) {
+    document.querySelectorAll('.main h2[id], .main h3[id]').forEach(function(heading) {
+      var link = document.createElement('a');
+      link.href = '#' + heading.id;
+      link.textContent = heading.textContent;
+      link.className = heading.tagName === 'H2' ? 'sub-main' : 'sub-child';
+      subNav.appendChild(link);
+    });
+  }
+  
+  var sections = document.querySelectorAll('.main h2[id], .main h3[id]');
+  if (sections.length) {
+    var observer = new IntersectionObserver(function(entries) {
+      entries.forEach(function(entry) {
+        if (entry.isIntersecting) {
+          var id = entry.target.id;
+          var links = document.querySelectorAll('.sub-nav a');
+          links.forEach(function(l) { l.classList.remove('active'); });
+          var active = document.querySelector('.sub-nav a[href="#' + id + '"]');
+          if (active) active.classList.add('active');
+        }
+      });
+    }, { rootMargin: '-40% 0px -40% 0px' });
+    sections.forEach(function(sec) { observer.observe(sec); });
+  }
+});
+</script>
+
+</body>
+</html>
