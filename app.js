@@ -1,12 +1,14 @@
-// Star Asset Manager — app.js
+// SparkArt Asset Manager — app.js
 const CDN = '/cdn/star';
 let manifest = null;
 let currentYear, currentMonth;
+let currentDay = 'mon';  // default day-of-week
 
 // ── Init ──
 document.addEventListener('DOMContentLoaded', () => {
   setupSidebar();
   setupNav();
+  setupDaySelector();
   const now = new Date();
   currentYear = now.getFullYear();
   currentMonth = now.getMonth();
@@ -117,6 +119,19 @@ function statusEmoji(status) {
   return { done: '✅', generating: '🔄', failed: '❌', pending: '⏳' }[status] || '·';
 }
 
+// ── Day Selector ──
+function setupDaySelector() {
+  document.querySelectorAll('.day-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.day-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentDay = btn.dataset.day;
+      const dateStr = getCurrentDate();
+      loadScript(dateStr, currentDay);
+    });
+  });
+}
+
 // ── Detail View ──
 function showDetail(dateStr) {
   const day = getDay(dateStr);
@@ -161,8 +176,12 @@ function showDetail(dateStr) {
     noAudio.classList.remove('hidden');
   }
 
-  // Script
-  loadScript(dateStr);
+  // Script — reset day to mon, reload
+  currentDay = 'mon';
+  document.querySelectorAll('.day-btn').forEach(b => b.classList.remove('active'));
+  const monBtn = document.querySelector('.day-btn[data-day="mon"]');
+  if (monBtn) monBtn.classList.add('active');
+  loadScript(dateStr, currentDay);
 
   // Meta
   loadMeta(dateStr, day);
@@ -186,10 +205,11 @@ function showDetail(dateStr) {
   document.getElementById('script-status').textContent = '';
 }
 
-async function loadScript(dateStr) {
+async function loadScript(dateStr, day) {
   const display = document.getElementById('script-display');
+  const dayParam = day || 'mon';
   try {
-    const res = await fetch(`${CDN}/${dateStr}/script.txt`);
+    const res = await fetch(`${CDN}/${dateStr}/${dayParam}.txt`);
     if (res.ok) {
       display.textContent = await res.text();
     } else {

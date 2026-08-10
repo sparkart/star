@@ -119,6 +119,40 @@ a:hover { color: var(--accent); }
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
 
+/* ── Day Selector ── */
+.day-selector {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+.day-label {
+  font-size: .8rem;
+  color: var(--muted);
+  margin-right: .25rem;
+}
+.day-btn {
+  padding: .25rem .55rem;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: .8rem;
+  transition: all .2s;
+}
+.day-btn:hover {
+  border-color: var(--accent);
+  background: #2a2a3e;
+}
+.day-btn.active {
+  background: var(--accent);
+  color: #000;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
 .script-toolbar { display: flex; gap: .5rem; margin-bottom: .5rem; }
 .script-toolbar button, .detail-actions button, #back-btn {
   padding: .4rem .8rem; border: 1px solid var(--border);
@@ -154,6 +188,22 @@ textarea {
 .detail-actions { display: flex; gap: .5rem; margin-top: 1.5rem; flex-wrap: wrap; }
 
 audio { width: 100%; margin-top: 1rem; }
+
+/* ── Day Selector ── */
+.day-selector {
+  display: flex; align-items: center; gap: .3rem;
+  margin-bottom: 1rem; padding: .5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.day-label { color: var(--muted); font-size: .8rem; margin-right: .5rem; }
+.day-btn {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 1px solid var(--border); background: var(--card);
+  color: var(--muted); cursor: pointer; font-size: .75rem;
+  transition: all .15s; display: flex; align-items: center; justify-content: center;
+}
+.day-btn:hover { border-color: var(--accent); color: var(--text); }
+.day-btn.active { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 700; }
 
 .loading { text-align: center; padding: 3rem; color: var(--muted); }
 
