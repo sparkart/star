@@ -572,6 +572,11 @@ ARTIFACT_TYPES = {
 MAX_JOB_ARTIFACTS = 200
 
 
+def _artifact_name(basename):
+    """A display/download name that cannot carry header or path syntax."""
+    return re.sub(r"[^A-Za-z0-9._-]", "_", basename)[:180] or "artifact"
+
+
 class JobArtifact:
     """A validated job-owned file, represented without exposing its path."""
 
@@ -582,7 +587,7 @@ class JobArtifact:
         self.parts = parts
         self.content_type = content_type
         self.media_type = media_type
-        self.name = re.sub(r"[^A-Za-z0-9._-]", "_", parts[-1])[:180] or "artifact"
+        self.name = _artifact_name(parts[-1])
         self.size = size
 
 
@@ -666,30 +671,43 @@ def resolve_job_artifact(service, job, index):
     return JobArtifact(service.root, parts, content_type, media_type, info.st_size)
 
 
-def _artifact_views(service, job):
-    """Safe render contract for artifacts; stored filesystem paths never ship."""
+def _artifact_views(service, job, verify=False):
+    """Safe render contract for artifacts; stored filesystem paths never ship.
+
+    `verify` opens every artifact, which is what makes `bytes` truthful and
+    drops entries whose file has since been deleted. Only the single-job
+    detail route pays that: the history list renders twenty jobs at a time and
+    would otherwise stat several thousand files to answer one poll. Redaction
+    is not conditional — no branch here can emit a stored path.
+    """
     result = job.get("result") if isinstance(job, dict) else None
     stored = result.get("artifacts") if isinstance(result, dict) else None
     if not isinstance(stored, list):
         return []
     views = []
     for index, entry in enumerate(stored[:MAX_JOB_ARTIFACTS]):
+        if not isinstance(entry, dict):
+            continue
         try:
-            artifact = resolve_job_artifact(service, job, index)
+            parts, (content_type, media_type) = _artifact_parts(entry.get("path"))
         except ApiError:
             continue
         view = {
             "id": str(index),
-            "name": artifact.name,
-            "kind": artifact.media_type,
-            "content_type": artifact.content_type,
-            "bytes": artifact.size,
+            "name": _artifact_name(parts[-1]),
+            "kind": media_type,
+            "content_type": content_type,
             "url": "/api/jobs/%s/artifacts/%d" % (job["id"], index),
         }
+        if verify:
+            try:
+                view["bytes"] = resolve_job_artifact(service, job, index).size
+            except ApiError:
+                continue
         # These are useful production labels, not path material. Keep them
         # tightly bounded and let the central redactor inspect the values too.
         for key in ("date", "day"):
-            value = entry.get(key) if isinstance(entry, dict) else None
+            value = entry.get(key)
             if (isinstance(value, str) and len(value) <= 32
                     and not any(ord(ch) < 32 or ord(ch) == 127 for ch in value)):
                 view[key] = value
@@ -744,13 +762,13 @@ def _translate(exc):
     return None
 
 
-def _job_view(service, job, events=0, after_id=0):
+def _job_view(service, job, events=0, after_id=0, verify_artifacts=False):
     """A job as the API returns it: input echoed, credentials impossible."""
     view = dict(job)
     result = view.get("result")
     if isinstance(result, dict) and "artifacts" in result:
         result = dict(result)
-        result["artifacts"] = _artifact_views(service, job)
+        result["artifacts"] = _artifact_views(service, job, verify=verify_artifacts)
         view["result"] = result
     if events:
         view["events"] = service.store.list_events(job["id"], limit=events,
