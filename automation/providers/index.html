@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="robots" content="noindex">
+<meta name="description" content="ตั้งค่าและทดสอบการเชื่อมต่อผู้ให้บริการของ Star — ค่าลับทั้งหมดถูกเก็บไว้ที่เซิร์ฟเวอร์เท่านั้นและไม่ถูกส่งกลับมาแสดง">
+<title>การเชื่อมต่อผู้ให้บริการ · Star Content Ops</title>
+
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23e0b768' d='M12 1.5c.35 4.6 2.4 7.4 6.9 8.3-4.5.9-6.55 3.7-6.9 8.3-.35-4.6-2.4-7.4-6.9-8.3 4.5-.9 6.55-3.7 6.9-8.3Z'/%3E%3C/svg%3E">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300..600,0..1,0&display=block">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/workspace.css">
+<link rel="stylesheet" href="/automation/automation.css">
+
+<link rel="prefetch" href="/automation/">
+<link rel="prefetch" href="/automation/run/">
+<link rel="prefetch" href="/automation/jobs/">
+<link rel="prefetch" href="/automation/schedule/">
+<link rel="prefetch" href="/automation/guide/">
+</head>
+<body data-ac-page="providers">
+
+<a class="skip-link" href="#workspace">ข้ามไปยังเนื้อหาหลัก</a>
+
+<header class="topbar">
+  <button class="icon-btn hamburger" id="hamburger" type="button"
+          aria-label="เปิดเมนูนำทาง" aria-expanded="false" aria-controls="sidebar">
+    <span class="ms" aria-hidden="true">menu</span>
+  </button>
+
+  <a href="/" class="brand" aria-label="Star — หน้าแรก">
+    <svg class="brand-mark" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+      <path d="M12 1.5c.35 4.6 2.4 7.4 6.9 8.3v0c-4.5.9-6.55 3.7-6.9 8.3-.35-4.6-2.4-7.4-6.9-8.3v0c4.5-.9 6.55-3.7 6.9-8.3Z" fill="currentColor"/>
+      <circle cx="19.6" cy="17.4" r="1.5" fill="currentColor" opacity=".6"/>
+      <circle cx="5.2" cy="4.6" r="1" fill="currentColor" opacity=".45"/>
+    </svg>
+    <span class="brand-name">Star</span>
+    <span class="brand-sub">Content Ops</span>
+  </a>
+
+  <div class="topbar-spacer"></div>
+
+  <div class="meta-chip">
+    <span class="ms" aria-hidden="true">lock</span>
+    <span>ค่าลับเก็บที่เซิร์ฟเวอร์เท่านั้น</span>
+  </div>
+
+  <button class="icon-btn" id="ac-refresh" type="button"
+          aria-label="โหลดข้อมูลใหม่" title="โหลดข้อมูลใหม่">
+    <span class="ms" aria-hidden="true">refresh</span>
+  </button>
+</header>
+
+<div class="shell">
+
+  <aside class="sidebar" id="sidebar" aria-label="เมนูนำทางหลัก">
+    <nav class="nav-links" aria-label="ส่วนงาน">
+      <span class="nav-group-label">งานผลิต</span>
+      <a href="/">
+        <span class="ms" aria-hidden="true">calendar_month</span><span>ปฏิทินการผลิต</span>
+      </a>
+      <a href="/content/">
+        <span class="ms" aria-hidden="true">folder_open</span><span>คลังคอนเทนต์</span>
+      </a>
+      <span class="nav-group-label">ระบบ</span>
+      <a href="/automation/" class="active" aria-current="page">
+        <span class="ms" aria-hidden="true">bolt</span><span>ระบบอัตโนมัติ</span>
+      </a>
+      <a href="/howto/">
+        <span class="ms" aria-hidden="true">menu_book</span><span>คู่มือระบบ</span>
+      </a>
+    </nav>
+
+    <div class="sub-nav" id="subNav"></div>
+
+    <div class="sidebar-foot">
+      <div class="legend-title">สถานะผู้ให้บริการ</div>
+      <ul class="legend">
+        <li><i class="legend-dot is-done" aria-hidden="true"></i>พร้อมใช้งาน</li>
+        <li><i class="legend-dot is-test" aria-hidden="true"></i>ตั้งค่าแล้ว รอยืนยัน</li>
+        <li><i class="legend-dot is-partial" aria-hidden="true"></i>ต้องทำเอง</li>
+        <li><i class="legend-dot is-none" aria-hidden="true"></i>ยังไม่ได้ตั้งค่า</li>
+      </ul>
+    </div>
+  </aside>
+  <div class="nav-scrim" id="nav-scrim" hidden></div>
+
+  <main class="main" id="app">
+
+    <div class="workspace-head" id="workspace">
+      <div class="workspace-title">
+        <span class="eyebrow">Control Center</span>
+        <h1>การเชื่อมต่อผู้ให้บริการ</h1>
+        <p class="workspace-desc">
+          ตั้งค่า ทดสอบ และตรวจสถานะการเชื่อมต่อทั้งหมดในที่เดียว
+          หน้านี้เขียนค่าลับได้อย่างเดียว อ่านกลับไม่ได้ไม่ว่ากรณีใด
+        </p>
+      </div>
+    </div>
+
+    <nav class="ac-nav" id="ac-nav" aria-label="ส่วนของศูนย์ควบคุมระบบอัตโนมัติ">
+      <a class="ac-nav-link" href="/automation/" data-ac-nav="dashboard">
+        <span class="ms" aria-hidden="true">dashboard</span><span>ภาพรวม</span>
+      </a>
+      <a class="ac-nav-link" href="/automation/run/" data-ac-nav="run">
+        <span class="ms" aria-hidden="true">play_arrow</span><span>สั่งรัน</span>
+      </a>
+      <a class="ac-nav-link" href="/automation/jobs/" data-ac-nav="jobs">
+        <span class="ms" aria-hidden="true">list_alt</span><span>งานและบันทึก</span>
+      </a>
+      <a class="ac-nav-link" href="/automation/schedule/" data-ac-nav="schedule">
+        <span class="ms" aria-hidden="true">schedule</span><span>ตารางเวลา</span>
+      </a>
+      <a class="ac-nav-link is-active" href="/automation/providers/" data-ac-nav="providers" aria-current="page">
+        <span class="ms" aria-hidden="true">hub</span><span>ผู้ให้บริการ</span>
+      </a>
+      <a class="ac-nav-link" href="/automation/guide/" data-ac-nav="guide">
+        <span class="ms" aria-hidden="true">menu_book</span><span>คู่มือคำทำนาย</span>
+      </a>
+    </nav>
+
+    <section class="doc-section" id="providers" aria-labelledby="providers-h">
+      <div class="section-head">
+        <h2 id="providers-h" data-nav-label="การเชื่อมต่อผู้ให้บริการ">
+          <span class="section-index" aria-hidden="true">01</span>
+          <span>การเชื่อมต่อผู้ให้บริการ</span>
+        </h2>
+        <span class="section-aside">GET /api/providers</span>
+      </div>
+
+      <div class="ac-tiles" id="ac-providers-summary" aria-busy="true">
+        <div class="ac-tile sk ac-sk-card" aria-hidden="true"></div>
+        <div class="ac-tile sk ac-sk-card" aria-hidden="true"></div>
+        <div class="ac-tile sk ac-sk-card" aria-hidden="true"></div>
+        <div class="ac-tile sk ac-sk-card" aria-hidden="true"></div>
+      </div>
+
+      <div class="callout callout-info">
+        <span class="ms" aria-hidden="true">lock</span>
+        <div class="callout-body">
+          <div class="callout-title">ค่าลับถูกเก็บไว้ที่เซิร์ฟเวอร์เท่านั้น</div>
+          <p>
+            ฟอร์มในหน้านี้จะไม่เติมค่าเดิมให้อัตโนมัติ และ API จะไม่ส่งค่าลับกลับมาไม่ว่ากรณีใด
+            สิ่งที่แสดงได้มีเพียงสถานะและตัวอักษรท้ายไม่กี่ตัวเพื่อยืนยันว่าบันทึกไว้แล้ว
+            ไฟล์ทั้งหมดถูกเขียนด้วยสิทธิ์ 0600 ในไดเรกทอรีสถานะ
+          </p>
+          <p>
+            Claude ใช้การล็อกอินของ CLI บนเซิร์ฟเวอร์ (<code class="inline">claude login</code>)
+            ระบบนี้ไม่รับ session token ของ Claude ผ่านเบราว์เซอร์
+          </p>
+        </div>
+      </div>
+
+      <div class="card-grid" id="ac-providers" aria-busy="true">
+        <div class="sk ac-sk-card" aria-hidden="true"></div>
+        <div class="sk ac-sk-card" aria-hidden="true"></div>
+        <div class="sk ac-sk-card" aria-hidden="true"></div>
+      </div>
+      <div class="state-block" id="ac-providers-empty" hidden></div>
+
+      <p class="ac-field-hint ac-page-foot">
+        ปลายทางที่ต้องอัปโหลดเองจะไม่ถูกรายงานว่าเผยแพร่สำเร็จ และตั้งเวลาอัตโนมัติไม่ได้ที่
+        <a href="/automation/schedule/">หน้าตารางเวลา</a>
+      </p>
+    </section>
+
+  </main>
+</div>
+
+<div class="toast-region" id="toast-region" role="status" aria-live="polite"></div>
+
+<script src="/workspace.js" defer></script>
+<script src="/automation/automation.js" defer></script>
+<script src="/automation/automation-nav.js" defer></script>
+<script src="/automation/pages-providers.js" defer></script>
+
+</body>
+</html>

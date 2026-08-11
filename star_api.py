@@ -575,6 +575,16 @@ def route_overview(ctx):
     return 200, ctx.automation.overview()
 
 
+def route_prediction_guide(ctx):
+    """The canonical prediction style guide, exactly as the prompt sees it.
+
+    Read-only, and nothing here is confidential: it is editorial style. Serving
+    it through the same loader the script stage uses is what keeps the rendered
+    page and the generated prompt from drifting apart.
+    """
+    return 200, ctx.automation.prediction_guide_view()
+
+
 def route_providers(ctx):
     service = ctx.automation
     return 200, {
@@ -746,6 +756,7 @@ HEX32 = r"(?P<id>[0-9a-f]{32})"
 # (method, compiled path pattern, handler, requires_intent_header)
 AUTOMATION_ROUTES = (
     ("GET", r"/api/automation/overview", route_overview, False),
+    ("GET", r"/api/automation/prediction-guide", route_prediction_guide, False),
     ("GET", r"/api/providers", route_providers, False),
     ("POST", r"/api/providers/configure", route_provider_configure, True),
     ("POST", r"/api/providers/test", route_provider_test, True),

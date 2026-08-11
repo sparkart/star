@@ -21,6 +21,7 @@ import errno
 import hashlib
 import json
 import os
+import re
 import secrets
 import selectors
 import shutil
@@ -63,6 +64,249 @@ THAI_FONT_CANDIDATES = (
     "/usr/share/fonts/truetype/tlwg/Sarabun-Regular.ttf",
     "/usr/share/fonts/truetype/thai/Garuda.ttf",
 )
+
+
+
+# ── prediction style guide ────────────────────────────────────────────
+#
+# automation/prediction-guide.json is the single canonical source for how a
+# prediction is allowed to sound. The frontend renders that same file and the
+# script prompt is built from it here — there is deliberately no second copy of
+# the editorial rules anywhere in this repository.
+#
+# The guide governs *style only*. Planetary facts come from the astro stage's
+# prediction JSON and are passed through untouched; nothing below can add,
+# remove or reinterpret an astronomical value.
+
+PREDICTION_GUIDE_RELPATH = "automation/prediction-guide.json"
+PREDICTION_GUIDE_SUPPORTED_MAJOR = 1
+
+# The caption heading is a hard contract shared with the caption tooling; a
+# guide that changes it silently would drift every downstream file, so the
+# loader refuses the guide instead.
+PREDICTION_GUIDE_HEADING = "ดวงของชาววัน{วัน} ประจำวันที่ {วันที่} {เดือนเต็ม} พ.ศ. {ปี}"
+PREDICTION_GUIDE_HASHTAG_COUNT = 5
+
+# Bounds for the prompt block. A guide that grows without limit would quietly
+# push the day's real astronomy data out of the model's attention, so the block
+# is capped item-by-item and as a whole.
+GUIDE_MAX_ITEMS = 12
+GUIDE_MAX_ITEM_CHARS = 220
+GUIDE_MAX_CHARS = 6000
+
+_VERSION_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
+
+_GUIDE_CACHE = {}
+_GUIDE_CACHE_LOCK = threading.Lock()
+
+
+class GuideError(Exception):
+    """The prediction guide is missing, unparseable or does not meet contract.
+
+    Carries only the repo-relative path and a description of the problem: no
+    file system layout beyond the project, and never any credential material.
+    """
+
+
+def guide_path(root):
+    return os.path.join(root, "automation", "prediction-guide.json")
+
+
+def _dig(data, path):
+    node = data
+    for key in path:
+        if not isinstance(node, dict) or key not in node:
+            return None
+        node = node[key]
+    return node
+
+
+def _is_text(value):
+    return isinstance(value, str) and value.strip() != ""
+
+
+def _is_text_list(value):
+    return (isinstance(value, list) and len(value) > 0
+            and all(_is_text(item) for item in value))
+
+
+# (dotted path, kind) — checked in this order so the reported problem list is
+# deterministic for a given guide.
+_GUIDE_TEXT_FIELDS = (
+    ("title",),
+    ("purpose",),
+    ("core_voice", "definition"),
+    ("mood_tone", "rhythm"),
+    ("structure", "caption_contract", "body_length"),
+    ("factual_rules", "source_of_truth"),
+    ("factual_rules", "uncertainty_language"),
+    ("factual_rules", "missing_data_behavior"),
+)
+
+_GUIDE_LIST_FIELDS = (
+    ("core_voice", "principles"),
+    ("mood_tone", "target"),
+    ("structure", "caption_contract", "heading_rules"),
+    ("structure", "caption_contract", "body_order"),
+    ("structure", "caption_contract", "hashtags", "rules"),
+    ("vocabulary", "preferred"),
+    ("vocabulary", "language_rules"),
+    ("factual_rules", "astronomy_and_astrology"),
+    ("factual_rules", "high_stakes"),
+    ("consistency_checklist",),
+)
+
+
+def validate_prediction_guide(data):
+    """Return the list of contract problems. Empty means the guide is usable."""
+    problems = []
+    if not isinstance(data, dict):
+        return ["the guide must be a JSON object"]
+
+    version = data.get("version")
+    match = _VERSION_RE.match(version) if isinstance(version, str) else None
+    if match is None:
+        problems.append("version is missing or is not MAJOR.MINOR.PATCH")
+    elif int(match.group(1)) != PREDICTION_GUIDE_SUPPORTED_MAJOR:
+        problems.append("version %s is not supported by this build (expected %d.x.x)"
+                        % (version, PREDICTION_GUIDE_SUPPORTED_MAJOR))
+
+    for path in _GUIDE_TEXT_FIELDS:
+        if not _is_text(_dig(data, path)):
+            problems.append("%s is missing or empty" % ".".join(path))
+    for path in _GUIDE_LIST_FIELDS:
+        if not _is_text_list(_dig(data, path)):
+            problems.append("%s must be a non-empty list of strings" % ".".join(path))
+
+    heading = _dig(data, ("structure", "caption_contract", "required_heading"))
+    if heading != PREDICTION_GUIDE_HEADING:
+        problems.append("structure.caption_contract.required_heading does not match "
+                        "the caption contract this build enforces")
+
+    hashtags = _dig(data, ("structure", "caption_contract", "hashtags"))
+    if not isinstance(hashtags, dict):
+        problems.append("structure.caption_contract.hashtags is missing")
+    else:
+        if hashtags.get("count") != PREDICTION_GUIDE_HASHTAG_COUNT:
+            problems.append("structure.caption_contract.hashtags.count must be %d"
+                            % PREDICTION_GUIDE_HASHTAG_COUNT)
+        order = hashtags.get("order")
+        if not _is_text_list(order) or len(order) != PREDICTION_GUIDE_HASHTAG_COUNT:
+            problems.append("structure.caption_contract.hashtags.order must list "
+                            "exactly %d hashtags" % PREDICTION_GUIDE_HASHTAG_COUNT)
+
+    prohibited = data.get("prohibited_patterns")
+    if not isinstance(prohibited, list) or not prohibited:
+        problems.append("prohibited_patterns must be a non-empty list")
+    elif not all(isinstance(item, dict) and _is_text(item.get("pattern"))
+                 for item in prohibited):
+        problems.append("every prohibited_patterns entry needs a pattern string")
+
+    return problems
+
+
+def load_prediction_guide(root, refresh=False):
+    """Read, validate and cache the canonical guide. Raises GuideError.
+
+    Cached on (mtime_ns, size) so an edited guide is picked up on the next job
+    without a restart, while a long run does not re-read the file per script.
+    """
+    path = guide_path(root)
+    try:
+        info = os.stat(path)
+    except OSError:
+        raise GuideError("prediction guide %s is missing" % PREDICTION_GUIDE_RELPATH)
+    stamp = (info.st_mtime_ns, info.st_size)
+
+    if not refresh:
+        with _GUIDE_CACHE_LOCK:
+            cached = _GUIDE_CACHE.get(path)
+        if cached is not None and cached[0] == stamp:
+            return cached[1]
+
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except ValueError:
+        raise GuideError("prediction guide %s is not valid JSON"
+                         % PREDICTION_GUIDE_RELPATH)
+    except OSError:
+        raise GuideError("prediction guide %s could not be read"
+                         % PREDICTION_GUIDE_RELPATH)
+
+    problems = validate_prediction_guide(data)
+    if problems:
+        raise GuideError("prediction guide %s does not meet contract: %s"
+                         % (PREDICTION_GUIDE_RELPATH, "; ".join(problems[:5])))
+
+    with _GUIDE_CACHE_LOCK:
+        _GUIDE_CACHE[path] = (stamp, data)
+    return data
+
+
+def _guide_lines(label, items, bullet="- "):
+    out = []
+    if not items:
+        return out
+    out.append(label)
+    for item in list(items)[:GUIDE_MAX_ITEMS]:
+        out.append(bullet + str(item).replace("\n", " ").strip()[:GUIDE_MAX_ITEM_CHARS])
+    return out
+
+
+def prediction_guide_prompt_block(guide):
+    """A deterministic, bounded rendering of the guide for a Claude prompt.
+
+    Deterministic: the traversal order is written out here rather than taken
+    from dict iteration, so the same guide file always produces byte-identical
+    text. Bounded: per-item and whole-block caps, applied last.
+    """
+    contract = _dig(guide, ("structure", "caption_contract")) or {}
+    hashtags = contract.get("hashtags") or {}
+    vocabulary = guide.get("vocabulary") or {}
+    factual = guide.get("factual_rules") or {}
+
+    lines = ["[คู่มือภาษาและน้ำเสียง เวอร์ชัน %s — บังคับใช้ทุกข้อ]" % guide.get("version", "?")]
+    lines.append("น้ำเสียงหลัก: " + str(_dig(guide, ("core_voice", "definition")) or "")[:GUIDE_MAX_ITEM_CHARS])
+    lines += _guide_lines("หลักการเขียน:", _dig(guide, ("core_voice", "principles")))
+    lines += _guide_lines("อารมณ์และโทนที่ต้องการ:", _dig(guide, ("mood_tone", "target")))
+    lines.append("จังหวะประโยค: " + str(_dig(guide, ("mood_tone", "rhythm")) or "")[:GUIDE_MAX_ITEM_CHARS])
+
+    lines.append("บรรทัดแรกต้องเป็น: " + str(contract.get("required_heading") or ""))
+    lines += _guide_lines("กฎของบรรทัดแรก:", contract.get("heading_rules"))
+    lines += _guide_lines("ลำดับเนื้อหา:", contract.get("body_order"))
+    lines.append("ความยาวเนื้อหา: " + str(contract.get("body_length") or "")[:GUIDE_MAX_ITEM_CHARS])
+    if hashtags:
+        lines.append("แฮชแท็ก: ต้องมี %s ตัวพอดี ตามลำดับ %s"
+                     % (hashtags.get("count"), " ".join(
+                         str(item) for item in (hashtags.get("order") or []))))
+        lines += _guide_lines("กฎแฮชแท็ก:", hashtags.get("rules"))
+
+    lines += _guide_lines("คำที่ควรใช้:", vocabulary.get("preferred"))
+    lines += _guide_lines("กฎภาษา:", vocabulary.get("language_rules"))
+
+    prohibited = []
+    for item in (guide.get("prohibited_patterns") or [])[:GUIDE_MAX_ITEMS]:
+        if not isinstance(item, dict):
+            continue
+        examples = [str(ex) for ex in (item.get("examples") or [])[:2]]
+        text = str(item.get("pattern", ""))
+        if examples:
+            text += " (เช่น " + " / ".join(examples) + ")"
+        prohibited.append(text)
+    lines += _guide_lines("ห้ามเด็ดขาด:", prohibited)
+
+    lines.append("แหล่งข้อมูลที่ใช้ได้: " + str(factual.get("source_of_truth") or "")[:GUIDE_MAX_ITEM_CHARS])
+    lines += _guide_lines("กฎข้อเท็จจริงทางดาราศาสตร์:", factual.get("astronomy_and_astrology"))
+    lines.append("ภาษาแสดงความไม่แน่นอน: " + str(factual.get("uncertainty_language") or "")[:GUIDE_MAX_ITEM_CHARS])
+    lines += _guide_lines("เรื่องละเอียดอ่อน:", factual.get("high_stakes"))
+    lines += _guide_lines("ตรวจก่อนส่ง:", guide.get("consistency_checklist"))
+    lines.append("[จบคู่มือ]")
+
+    block = "\n".join(line for line in lines if line.strip())
+    if len(block) > GUIDE_MAX_CHARS:
+        block = block[:GUIDE_MAX_CHARS].rsplit("\n", 1)[0] + "\n[คู่มือถูกตัดตามขีดจำกัดความยาว]"
+    return block
 
 
 class StageBlocked(Exception):
@@ -387,20 +631,35 @@ class ScriptStage(StageAdapter):
     label = "Script generation"
 
     def prerequisites(self, ctx):
+        missing = []
         provider = ctx.providers.get("claude")
         status = provider.status()
         if status["status"] == star_providers.NOT_CONFIGURED:
-            return ["Claude CLI is not available: " + status["detail"]]
-        return []
+            missing.append("Claude CLI is not available: " + status["detail"])
+        # Fail closed: without a valid guide the tone would drift silently,
+        # which is worse than not generating at all. A dry run surfaces this as
+        # an unmet prerequisite; a production run blocks on it below.
+        try:
+            load_prediction_guide(ctx.root)
+        except GuideError as exc:
+            missing.append(str(exc))
+        return missing
 
-    def _prompt(self, date, day, prediction):
-        """Deterministic prompt built from the day's real prediction data."""
+    def _prompt(self, date, day, prediction, guide_block):
+        """Deterministic prompt built from the day's real prediction data.
+
+        Two inputs, two roles: `prediction` is the authoritative astronomy and
+        is never restated as a rule, `guide_block` is style and never adds a
+        fact. The guide is placed first so the facts stay closest to the task.
+        """
         th = DAY_TH.get(day, day)
         facts = json.dumps(prediction, ensure_ascii=False, sort_keys=True)[:4000]
         return (
             "เขียนสคริปต์พากย์ดวงรายวันภาษาไทย สำหรับชาววันเกิด" + th + " "
-            "ประจำวันที่ " + date + "\n"
-            "ใช้ข้อมูลโหราศาสตร์ต่อไปนี้เท่านั้น ห้ามแต่งข้อมูลดาวเพิ่ม:\n"
+            "ประจำวันที่ " + date + "\n\n"
+            + guide_block + "\n\n"
+            "ใช้ข้อมูลโหราศาสตร์ต่อไปนี้เท่านั้น ห้ามแต่งข้อมูลดาวเพิ่ม "
+            "และห้ามให้คู่มือด้านบนเปลี่ยนค่าหรือความหมายของข้อมูลนี้:\n"
             + facts + "\n\n"
             "ข้อกำหนด: ขึ้นต้นด้วย \"ดวงของชาววัน" + th + "\" "
             "ความยาว 3-5 ประโยค น้ำเสียงเป็นมิตร ไม่ใช้อิโมจิ "
@@ -422,6 +681,14 @@ class ScriptStage(StageAdapter):
 
     def plan(self, ctx):
         binary = shutil.which("claude") or "claude"
+        try:
+            guide = load_prediction_guide(ctx.root)
+            ctx.plan("style guide %s version %s would be embedded in every prompt"
+                     % (PREDICTION_GUIDE_RELPATH, guide.get("version")),
+                     output="%d characters of style rules"
+                            % len(prediction_guide_prompt_block(guide)))
+        except GuideError as exc:
+            ctx.plan("script stage would refuse to run: %s" % exc)
         pending = skipped = 0
         for date in ctx.dates:
             for day in ctx.days:
@@ -446,6 +713,18 @@ class ScriptStage(StageAdapter):
         env = dict(os.environ)
         env["CLAUDE_CONFIG_DIR"] = provider.config_dir()
 
+        # Loaded once per run, before any paid call: a broken guide must stop
+        # the stage rather than let the first script through with a drifted
+        # tone. The message names the file and the fault, nothing else.
+        try:
+            guide = load_prediction_guide(ctx.root)
+        except GuideError as exc:
+            raise StageBlocked(str(exc))
+        guide_block = prediction_guide_prompt_block(guide)
+        ctx.log("style guide %s version %s loaded (%d chars in prompt)"
+                % (PREDICTION_GUIDE_RELPATH, guide.get("version"), len(guide_block)),
+                stage=self.name)
+
         written = skipped = 0
         for date in ctx.dates:
             for day in ctx.days:
@@ -458,7 +737,7 @@ class ScriptStage(StageAdapter):
                 if prediction is None:
                     raise StageBlocked(
                         "no prediction for %s/%s — run the astro stage first" % (date, day))
-                prompt = self._prompt(date, day, prediction)
+                prompt = self._prompt(date, day, prediction, guide_block)
                 code, lines = run_command(
                     [binary, "--print", prompt],
                     timeout=STAGE_TIMEOUT[self.name], cwd=ctx.root, env=env,
@@ -1170,6 +1449,36 @@ class AutomationService:
     def close(self):
         self.runner.stop()
         self.scheduler.stop()
+
+    # -- prediction style guide -----------------------------------------
+    def prediction_guide_view(self):
+        """The canonical guide plus this build's verdict on it.
+
+        The page that renders the guide and the prompt that consumes it read
+        the same file through the same validator, so an operator can never be
+        looking at rules the script stage has already rejected.
+        """
+        view = {
+            "source": PREDICTION_GUIDE_RELPATH,
+            "supported_major": PREDICTION_GUIDE_SUPPORTED_MAJOR,
+            "required_heading": PREDICTION_GUIDE_HEADING,
+            "hashtag_count": PREDICTION_GUIDE_HASHTAG_COUNT,
+            "max_prompt_chars": GUIDE_MAX_CHARS,
+        }
+        try:
+            guide = load_prediction_guide(self.root)
+        except GuideError as exc:
+            view.update({"valid": False, "error": str(exc), "guide": None,
+                         "version": None, "prompt_chars": 0})
+            return view
+        view.update({
+            "valid": True,
+            "error": None,
+            "version": guide.get("version"),
+            "prompt_chars": len(prediction_guide_prompt_block(guide)),
+            "guide": guide,
+        })
+        return view
 
     def log_internal(self, message):
         import sys
