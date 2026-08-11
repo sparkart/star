@@ -22,6 +22,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import sys
 import tempfile
 import threading
@@ -545,6 +546,157 @@ class RawUpload:
         self.content_type = content_type
 
 
+# Job artifacts are deliberately narrower than "any file under the project".
+# These are the only roots the production pipeline promotes generated output
+# into, and the only formats the control centre knows how to preview safely.
+ARTIFACT_ROOTS = (
+    ("output",),
+    ("content", "raw_astro"),
+    ("content", "horoscope"),
+    ("content", "scripts"),
+)
+ARTIFACT_TYPES = {
+    ".jpg": ("image/jpeg", "image"),
+    ".jpeg": ("image/jpeg", "image"),
+    ".png": ("image/png", "image"),
+    ".webp": ("image/webp", "image"),
+    ".mp4": ("video/mp4", "video"),
+    ".webm": ("video/webm", "video"),
+    ".mp3": ("audio/mpeg", "audio"),
+    ".wav": ("audio/wav", "audio"),
+    ".ogg": ("audio/ogg", "audio"),
+    ".m4a": ("audio/mp4", "audio"),
+    ".txt": ("text/plain; charset=utf-8", "text"),
+    ".json": ("application/json; charset=utf-8", "json"),
+}
+MAX_JOB_ARTIFACTS = 200
+
+
+class JobArtifact:
+    """A validated job-owned file, represented without exposing its path."""
+
+    __slots__ = ("root", "parts", "content_type", "media_type", "name", "size")
+
+    def __init__(self, root, parts, content_type, media_type, size):
+        self.root = root
+        self.parts = parts
+        self.content_type = content_type
+        self.media_type = media_type
+        self.name = re.sub(r"[^A-Za-z0-9._-]", "_", parts[-1])[:180] or "artifact"
+        self.size = size
+
+
+def _artifact_parts(value):
+    """Validate one stored project-relative artifact path lexically.
+
+    The open below also refuses symlinks component-by-component. Keeping the
+    lexical check separate makes traversal, Windows paths and unsupported
+    project locations fail before the filesystem is touched.
+    """
+    if not isinstance(value, str) or not value or len(value) > 1024:
+        raise ApiError(404, "artifact is unavailable")
+    if os.path.isabs(value) or "\\" in value or "\x00" in value:
+        raise ApiError(404, "artifact is unavailable")
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in value):
+        raise ApiError(404, "artifact is unavailable")
+    parts = tuple(value.split("/"))
+    if (not parts or any(not part or part in (".", "..") for part in parts)
+            or not any(parts[:len(prefix)] == prefix for prefix in ARTIFACT_ROOTS)):
+        raise ApiError(404, "artifact is unavailable")
+    extension = os.path.splitext(parts[-1])[1].lower()
+    if extension not in ARTIFACT_TYPES:
+        raise ApiError(404, "artifact is unavailable")
+    return parts, ARTIFACT_TYPES[extension]
+
+
+def _open_artifact(root, parts):
+    """Open a regular file below root without following any symlink.
+
+    Walking with directory file descriptors closes the usual realpath/open
+    race: an intermediate directory cannot be swapped for a symlink between a
+    validation check and the final open. Generated artifacts never need to be
+    symlinks, so failing closed is the simplest contract.
+    """
+    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    file_flags = os.O_RDONLY
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    cloexec = getattr(os, "O_CLOEXEC", 0)
+    directory_fd = None
+    try:
+        directory_fd = os.open(os.path.realpath(root), directory_flags | cloexec)
+        for part in parts[:-1]:
+            next_fd = os.open(part, directory_flags | nofollow | cloexec,
+                              dir_fd=directory_fd)
+            os.close(directory_fd)
+            directory_fd = next_fd
+        file_fd = os.open(parts[-1], file_flags | nofollow | cloexec,
+                          dir_fd=directory_fd)
+        info = os.fstat(file_fd)
+        if not stat.S_ISREG(info.st_mode):
+            os.close(file_fd)
+            raise ApiError(404, "artifact is unavailable")
+        return file_fd, info
+    except ApiError:
+        raise
+    except (OSError, ValueError):
+        raise ApiError(404, "artifact is unavailable")
+    finally:
+        if directory_fd is not None:
+            try:
+                os.close(directory_fd)
+            except OSError:
+                pass
+
+
+def resolve_job_artifact(service, job, index):
+    """Resolve an artifact index only through the selected job's result."""
+    if isinstance(index, bool) or not isinstance(index, int):
+        raise ApiError(404, "artifact is unavailable")
+    result = job.get("result") if isinstance(job, dict) else None
+    artifacts = result.get("artifacts") if isinstance(result, dict) else None
+    if (not isinstance(artifacts, list) or index < 0
+            or index >= min(len(artifacts), MAX_JOB_ARTIFACTS)):
+        raise ApiError(404, "artifact is unavailable")
+    entry = artifacts[index]
+    if not isinstance(entry, dict):
+        raise ApiError(404, "artifact is unavailable")
+    parts, (content_type, media_type) = _artifact_parts(entry.get("path"))
+    file_fd, info = _open_artifact(service.root, parts)
+    os.close(file_fd)
+    return JobArtifact(service.root, parts, content_type, media_type, info.st_size)
+
+
+def _artifact_views(service, job):
+    """Safe render contract for artifacts; stored filesystem paths never ship."""
+    result = job.get("result") if isinstance(job, dict) else None
+    stored = result.get("artifacts") if isinstance(result, dict) else None
+    if not isinstance(stored, list):
+        return []
+    views = []
+    for index, entry in enumerate(stored[:MAX_JOB_ARTIFACTS]):
+        try:
+            artifact = resolve_job_artifact(service, job, index)
+        except ApiError:
+            continue
+        view = {
+            "id": str(index),
+            "name": artifact.name,
+            "kind": artifact.media_type,
+            "content_type": artifact.content_type,
+            "bytes": artifact.size,
+            "url": "/api/jobs/%s/artifacts/%d" % (job["id"], index),
+        }
+        # These are useful production labels, not path material. Keep them
+        # tightly bounded and let the central redactor inspect the values too.
+        for key in ("date", "day"):
+            value = entry.get(key) if isinstance(entry, dict) else None
+            if (isinstance(value, str) and len(value) <= 32
+                    and not any(ord(ch) < 32 or ord(ch) == 127 for ch in value)):
+                view[key] = value
+        views.append(view)
+    return views
+
+
 class RequestContext:
     """Everything a control-plane handler is given. No handler touches self."""
 
@@ -595,6 +747,11 @@ def _translate(exc):
 def _job_view(service, job, events=0, after_id=0):
     """A job as the API returns it: input echoed, credentials impossible."""
     view = dict(job)
+    result = view.get("result")
+    if isinstance(result, dict) and "artifacts" in result:
+        result = dict(result)
+        result["artifacts"] = _artifact_views(service, job)
+        view["result"] = result
     if events:
         view["events"] = service.store.list_events(job["id"], limit=events,
                                                    after_id=after_id)
@@ -758,6 +915,20 @@ def route_job_detail(ctx):
     return 200, _job_view(service, job, events=limit, after_id=after)
 
 
+def route_job_artifact(ctx):
+    """Return one validated artifact that belongs to exactly one job result."""
+    service = ctx.automation
+    job_id = star_jobs.valid_job_id(ctx.params.get("id"))
+    job = service.store.get_job(job_id)
+    if job is None:
+        raise ApiError(404, "unknown job")
+    try:
+        index = int(ctx.params.get("artifact"))
+    except (TypeError, ValueError):
+        raise ApiError(404, "artifact is unavailable")
+    return 200, resolve_job_artifact(service, job, index)
+
+
 def route_job_cancel(ctx):
     service = ctx.automation
     job_id = star_jobs.valid_job_id(ctx.params.get("id"))
@@ -856,6 +1027,7 @@ def _int_param(query, name, default, low, high):
 
 
 HEX32 = r"(?P<id>[0-9a-f]{32})"
+ARTIFACT_INDEX = r"(?P<artifact>0|[1-9][0-9]{0,2})"
 
 # (method, compiled path pattern, handler, requires_intent_header)
 AUTOMATION_ROUTES = (
@@ -868,6 +1040,8 @@ AUTOMATION_ROUTES = (
     ("POST", r"/api/jobs", route_jobs_create, True),
     ("POST", r"/api/assets/background", route_asset_background, True),
     ("GET", r"/api/jobs/" + HEX32, route_job_detail, False),
+    ("GET", r"/api/jobs/" + HEX32 + r"/artifacts/" + ARTIFACT_INDEX,
+     route_job_artifact, False),
     ("POST", r"/api/jobs/" + HEX32 + r"/cancel", route_job_cancel, True),
     ("POST", r"/api/jobs/" + HEX32 + r"/retry", route_job_retry, True),
     ("GET", r"/api/schedule", route_schedule_get, False),
@@ -884,7 +1058,8 @@ COMPILED_AUTOMATION = tuple(
 # Paths that exist but where an unmatched id should still 404 rather than
 # falling through to "unknown endpoint" — purely cosmetic, but it makes a
 # mistyped job id obvious in the response.
-JOB_PATH_RE = re.compile(r"^/api/jobs/[^/]+(?:/(?:cancel|retry))?$")
+JOB_PATH_RE = re.compile(
+    r"^/api/jobs/[^/]+(?:/(?:cancel|retry)|/artifacts/[^/]+)?$")
 
 
 def match_automation(method, path):
@@ -939,6 +1114,81 @@ class StarHandler(BaseHTTPRequestHandler):
         payload = {"error": message, "status": status}
         payload.update(extra)
         self.send_json(status, payload)
+
+    def _send_artifact_headers(self, artifact, status, length, content_range=None):
+        self.send_response(status)
+        self.send_header("Content-Type", artifact.content_type)
+        self.send_header("Content-Length", str(length))
+        self.send_header("Content-Disposition", 'inline; filename="%s"' % artifact.name)
+        self.send_header("Accept-Ranges", "bytes")
+        if content_range:
+            self.send_header("Content-Range", content_range)
+        self.send_header("Cache-Control", "private, no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+        self.send_header("Content-Security-Policy",
+                         "default-src 'none'; frame-ancestors 'none'; sandbox")
+        self.send_header("Permissions-Policy", "geolocation=(), camera=(), microphone=()")
+        self.end_headers()
+
+    def _requested_byte_range(self, size):
+        raw = self.headers.get("Range")
+        if not raw:
+            return None
+        match = re.fullmatch(r"bytes=(\d*)-(\d*)", raw.strip())
+        if match is None or (not match.group(1) and not match.group(2)) or size <= 0:
+            return False
+        if not match.group(1):
+            suffix = int(match.group(2))
+            if suffix <= 0:
+                return False
+            return max(0, size - suffix), size - 1
+        start = int(match.group(1))
+        end = int(match.group(2)) if match.group(2) else size - 1
+        if start >= size or end < start:
+            return False
+        return start, min(end, size - 1)
+
+    def send_artifact(self, artifact):
+        """Stream a validated file, including byte ranges for native media."""
+        try:
+            file_fd, info = _open_artifact(artifact.root, artifact.parts)
+        except ApiError as exc:
+            self.send_error_json(exc.status, exc.message)
+            return
+
+        requested = self._requested_byte_range(info.st_size)
+        if requested is False:
+            os.close(file_fd)
+            self.send_response(416)
+            self.send_header("Content-Range", "bytes */%d" % info.st_size)
+            self.send_header("Content-Length", "0")
+            self.send_header("Cache-Control", "private, no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            return
+
+        start, end = requested if requested is not None else (0, info.st_size - 1)
+        length = max(0, end - start + 1)
+        status = 206 if requested is not None else 200
+        content_range = ("bytes %d-%d/%d" % (start, end, info.st_size)
+                         if requested is not None else None)
+        self._send_artifact_headers(artifact, status, length, content_range)
+        try:
+            with os.fdopen(file_fd, "rb") as source:
+                if start:
+                    source.seek(start)
+                remaining = length
+                while remaining:
+                    chunk = source.read(min(64 * 1024, remaining))
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    remaining -= len(chunk)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     # -- security ---------------------------------------------------
     def same_origin_ok(self):
@@ -1193,7 +1443,10 @@ class StarHandler(BaseHTTPRequestHandler):
             self.log_message("unhandled error on %s %s: %r", method, path, exc)
             self.send_error_json(500, "internal server error")
             return
-        self.send_json(status, payload)
+        if isinstance(payload, JobArtifact):
+            self.send_artifact(payload)
+        else:
+            self.send_json(status, payload)
 
     def do_GET(self):
         self.dispatch("GET")

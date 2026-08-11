@@ -218,6 +218,32 @@
   </main>
 </div>
 
+<dialog class="ac-preview-dialog" id="ac-preview-dialog"
+        aria-modal="true" aria-labelledby="ac-preview-title"
+        aria-describedby="ac-preview-meta">
+  <div class="ac-preview-panel">
+    <header class="ac-preview-head">
+      <div class="ac-preview-heading">
+        <span class="ac-preview-kicker">ตัวอย่างไฟล์ที่สร้าง</span>
+        <h2 id="ac-preview-title">ตัวอย่าง</h2>
+        <p id="ac-preview-meta"></p>
+      </div>
+      <button class="icon-btn ac-preview-close" id="ac-preview-close" type="button"
+              aria-label="ปิดหน้าต่างตัวอย่าง" title="ปิดหน้าต่างตัวอย่าง">
+        <span class="ms" aria-hidden="true">close</span>
+      </button>
+    </header>
+    <div class="ac-preview-body" id="ac-preview-body" aria-live="polite"></div>
+    <footer class="ac-preview-foot">
+      <a class="btn btn-sm btn-quiet" id="ac-preview-original"
+         target="_blank" rel="noopener">
+        <span class="ms" aria-hidden="true">open_in_new</span>
+        <span>เปิดไฟล์ต้นฉบับ</span>
+      </a>
+    </footer>
+  </div>
+</dialog>
+
 <div class="toast-region" id="toast-region" role="status" aria-live="polite"></div>
 
 <script src="/workspace.js" defer></script>
