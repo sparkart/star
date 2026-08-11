@@ -24,9 +24,10 @@ import re
 import shutil
 import sys
 import tempfile
+import threading
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlsplit
 
 VERSION = "1.0.0"
 HOST = "127.0.0.1"
@@ -492,6 +493,300 @@ for _method, _path in ROUTES:
     PATHS[_path].add("OPTIONS")
 
 
+# ── automation control plane ──────────────────────────────────────────
+#
+# These routes are kept in their own table because they need three things the
+# original five do not: path parameters, a query string, and a CSRF intent
+# header. The original table and its handler signature are untouched so the
+# existing endpoints and their tests keep behaving exactly as before.
+
+INTENT_HEADER = "X-Star-Intent"
+INTENT_VALUE = "automation-control"
+MAX_QUERY_PARAMS = 20
+MAX_QUERY_VALUE = 2048
+
+# Imported lazily inside the handlers' module scope: these are pure-Python
+# stdlib-only modules in this repo, so the import is cheap and safe at module
+# load, but a broken optional dependency must never take the whole API down.
+try:
+    import star_automation
+    import star_jobs
+    import star_providers
+    import star_redact
+    from star_state import StateError
+    AUTOMATION_IMPORT_ERROR = None
+except Exception as _exc:  # pragma: no cover - only on a broken deployment
+    star_automation = star_jobs = star_providers = star_redact = None
+    StateError = OSError
+    AUTOMATION_IMPORT_ERROR = repr(_exc)
+
+
+class RequestContext:
+    """Everything a control-plane handler is given. No handler touches self."""
+
+    def __init__(self, server, method, path, params, query, body, host, scheme):
+        self.server = server
+        self.method = method
+        self.path = path
+        self.params = params
+        self.query = query
+        self.body = body
+        self.host = host
+        self.scheme = scheme
+
+    @property
+    def store(self):
+        return self.server.store
+
+    @property
+    def automation(self):
+        return self.server.automation_service()
+
+
+def _as_object(body):
+    if body is None:
+        raise ApiError(400, "request body is required")
+    if not isinstance(body, dict):
+        raise ApiError(400, "request body must be a JSON object")
+    return body
+
+
+def _translate(exc):
+    """Map a domain exception onto the API's error contract."""
+    if star_jobs is not None and isinstance(exc, star_jobs.JobValidationError):
+        return ApiError(400, exc.message, **({"field": exc.field} if exc.field else {}))
+    if star_jobs is not None and isinstance(exc, star_jobs.JobConflict):
+        return ApiError(409, exc.message, active_job=exc.active)
+    if star_providers is not None and isinstance(exc, star_providers.ProviderError):
+        return ApiError(400, exc.message, **({"field": exc.field} if exc.field else {}))
+    return None
+
+
+def _job_view(service, job, events=0, after_id=0):
+    """A job as the API returns it: input echoed, credentials impossible."""
+    view = dict(job)
+    if events:
+        view["events"] = service.store.list_events(job["id"], limit=events,
+                                                   after_id=after_id)
+    return star_redact.redact_obj(view)
+
+
+def route_overview(ctx):
+    return 200, ctx.automation.overview()
+
+
+def route_providers(ctx):
+    service = ctx.automation
+    return 200, {
+        "generated_at": star_jobs.utcnow(),
+        "providers": service.providers.statuses(),
+        "note": "stored credentials are never returned by this API",
+    }
+
+
+def route_provider_configure(ctx):
+    body = _as_object(ctx.body)
+    key = body.get("provider")
+    service = ctx.automation
+    provider = service.providers.get(key)
+    config = body.get("config")
+    if config is None:
+        config = {k: v for k, v in body.items() if k != "provider"}
+    if not isinstance(config, dict):
+        raise ApiError(400, "config must be a JSON object", field="config")
+    status = provider.configure(config)
+    problems = service.state.audit()
+    if problems:
+        # Surfaced rather than swallowed: a world-readable credential is an
+        # operator-visible problem, not something to fix silently.
+        status = dict(status)
+        status["permission_problems"] = problems
+    return 200, status
+
+
+def route_provider_test(ctx):
+    body = _as_object(ctx.body)
+    service = ctx.automation
+    provider = service.providers.get(body.get("provider"))
+    live = body.get("live", False)
+    if not isinstance(live, bool):
+        raise ApiError(400, "live must be true or false", field="live")
+    return 200, provider.test(live=live)
+
+
+def route_jobs_list(ctx):
+    service = ctx.automation
+    limit = _int_param(ctx.query, "limit", default=25, low=1, high=star_jobs.MAX_JOBS_RETURNED)
+    status = ctx.query.get("status")
+    if status is not None and status not in star_jobs.ALL_STATES:
+        raise ApiError(400, "unknown status filter; allowed: %s"
+                       % " ".join(star_jobs.ALL_STATES), field="status")
+    jobs = service.store.list_jobs(limit=limit, status=status)
+    return 200, {
+        "jobs": [_job_view(service, job) for job in jobs],
+        "active_job": service.store.active_job(),
+        "count": len(jobs),
+        "generated_at": star_jobs.utcnow(),
+    }
+
+
+def route_jobs_create(ctx):
+    service = ctx.automation
+    job_input = star_jobs.validate_job_input(_as_object(ctx.body))
+    job = service.store.create_job(job_input, origin="manual")
+    return 201, _job_view(service, job)
+
+
+def route_job_detail(ctx):
+    service = ctx.automation
+    job_id = star_jobs.valid_job_id(ctx.params.get("id"))
+    job = service.store.get_job(job_id)
+    if job is None:
+        raise ApiError(404, "unknown job")
+    limit = _int_param(ctx.query, "events", default=200, low=0,
+                       high=star_jobs.MAX_EVENTS_RETURNED)
+    after = _int_param(ctx.query, "after_id", default=0, low=0, high=2 ** 31)
+    return 200, _job_view(service, job, events=limit, after_id=after)
+
+
+def route_job_cancel(ctx):
+    service = ctx.automation
+    job_id = star_jobs.valid_job_id(ctx.params.get("id"))
+    changed, job = service.store.request_cancel(job_id)
+    if job is None:
+        raise ApiError(404, "unknown job")
+    if not changed:
+        raise ApiError(409, "job is already %s" % job["status"], job=_job_view(service, job))
+    service.store.add_event(job_id, "warn", "cancellation requested by the operator")
+    return 200, _job_view(service, service.store.get_job(job_id))
+
+
+def route_job_retry(ctx):
+    """Create a *new* job that references the parent.
+
+    Deliberately manual: nothing in this service ever retries on its own, so a
+    failing provider cannot turn into a loop of paid calls.
+    """
+    service = ctx.automation
+    job_id = star_jobs.valid_job_id(ctx.params.get("id"))
+    parent = service.store.get_job(job_id)
+    if parent is None:
+        raise ApiError(404, "unknown job")
+    if parent["status"] in star_jobs.ACTIVE_STATES:
+        raise ApiError(409, "job is still %s; cancel it before retrying" % parent["status"],
+                       job=_job_view(service, parent))
+
+    overrides = ctx.body if isinstance(ctx.body, dict) else {}
+    merged = dict(parent["input"])
+    merged.pop("dates", None)
+    for key in ("from_date", "to_date", "days", "stages", "platforms", "dry_run",
+                "force", "note"):
+        if key in overrides:
+            merged[key] = overrides[key]
+    job_input = star_jobs.validate_job_input(merged)
+    job = service.store.create_job(job_input, parent_id=parent["id"], origin="retry")
+    service.store.add_event(job["id"], "info", "manual retry of job %s" % parent["id"])
+    return 201, _job_view(service, job)
+
+
+def route_schedule_get(ctx):
+    service = ctx.automation
+    config = service.store.get_schedule()
+    config["note"] = ("one run per day in Asia/Bangkok; disabled by default and "
+                      "never auto-retried")
+    return 200, config
+
+
+def route_schedule_put(ctx):
+    service = ctx.automation
+    config = star_jobs.validate_schedule_input(_as_object(ctx.body))
+    stored = service.store.set_schedule(config)
+    return 200, stored
+
+
+def route_oauth_youtube_start(ctx):
+    service = ctx.automation
+    return 200, service.oauth.start(host=ctx.host, scheme=ctx.scheme)
+
+
+def route_oauth_youtube_callback(ctx):
+    """Completes the flow from Google's browser redirect.
+
+    No intent header is required here and that is intentional: this request is
+    a top-level navigation initiated by Google, so it cannot carry a custom
+    header. The CSRF defence is the single-use, unguessable, short-lived state
+    parameter that `consume_oauth_state` burns before the code is exchanged.
+    """
+    service = ctx.automation
+    status = service.oauth.callback(ctx.query)
+    return 200, {
+        "ok": True,
+        "provider": "youtube",
+        "status": status,
+        "message": "YouTube authorisation stored. You can close this tab and "
+                   "return to the automation page.",
+    }
+
+
+def _int_param(query, name, default, low, high):
+    raw = query.get(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        raise ApiError(400, "%s must be an integer" % name, field=name)
+    if value < low or value > high:
+        raise ApiError(400, "%s must be between %d and %d" % (name, low, high), field=name)
+    return value
+
+
+HEX32 = r"(?P<id>[0-9a-f]{32})"
+
+# (method, compiled path pattern, handler, requires_intent_header)
+AUTOMATION_ROUTES = (
+    ("GET", r"/api/automation/overview", route_overview, False),
+    ("GET", r"/api/providers", route_providers, False),
+    ("POST", r"/api/providers/configure", route_provider_configure, True),
+    ("POST", r"/api/providers/test", route_provider_test, True),
+    ("GET", r"/api/jobs", route_jobs_list, False),
+    ("POST", r"/api/jobs", route_jobs_create, True),
+    ("GET", r"/api/jobs/" + HEX32, route_job_detail, False),
+    ("POST", r"/api/jobs/" + HEX32 + r"/cancel", route_job_cancel, True),
+    ("POST", r"/api/jobs/" + HEX32 + r"/retry", route_job_retry, True),
+    ("GET", r"/api/schedule", route_schedule_get, False),
+    ("PUT", r"/api/schedule", route_schedule_put, True),
+    ("GET", r"/api/oauth/youtube/start", route_oauth_youtube_start, True),
+    ("GET", r"/api/oauth/youtube/callback", route_oauth_youtube_callback, False),
+)
+
+COMPILED_AUTOMATION = tuple(
+    (method, re.compile("^" + pattern + "$"), handler, intent)
+    for method, pattern, handler, intent in AUTOMATION_ROUTES
+)
+
+# Paths that exist but where an unmatched id should still 404 rather than
+# falling through to "unknown endpoint" — purely cosmetic, but it makes a
+# mistyped job id obvious in the response.
+JOB_PATH_RE = re.compile(r"^/api/jobs/[^/]+(?:/(?:cancel|retry))?$")
+
+
+def match_automation(method, path):
+    """Return (handler, params, requires_intent, allowed_methods_for_path)."""
+    allowed = set()
+    found = None
+    for route_method, pattern, handler, intent in COMPILED_AUTOMATION:
+        match = pattern.match(path)
+        if match is None:
+            continue
+        allowed.add(route_method)
+        if route_method == method:
+            found = (handler, match.groupdict(), intent)
+    if allowed:
+        allowed.add("OPTIONS")
+    return found, allowed
+
+
 # ── HTTP layer ────────────────────────────────────────────────────────
 
 class StarHandler(BaseHTTPRequestHandler):
@@ -515,6 +810,9 @@ class StarHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+        self.send_header("Permissions-Policy", "geolocation=(), camera=(), microphone=()")
         for key, value in (extra_headers or {}).items():
             self.send_header(key, value)
         self.end_headers()
@@ -541,7 +839,48 @@ class StarHandler(BaseHTTPRequestHandler):
             return False
         return parsed.netloc == host
 
-    def read_body(self):
+    def host_ok(self):
+        """Reject a forged Host when the operator pinned an allowlist.
+
+        Applied to the automation control plane only; the original endpoints
+        keep their previous, more permissive behaviour so nothing that already
+        works against this API breaks.
+        """
+        host = self.headers.get("Host", "")
+        if not host or "\n" in host or "\r" in host:
+            return False
+        allowed = os.environ.get("STAR_ALLOWED_HOSTS", "").strip()
+        if not allowed:
+            return True
+        return host in {item.strip() for item in allowed.split(",") if item.strip()}
+
+    def intent_ok(self):
+        """CSRF guard: a custom header a cross-origin form simply cannot send."""
+        return self.headers.get(INTENT_HEADER, "").strip() == INTENT_VALUE
+
+    def parse_query(self):
+        raw = urlsplit(self.path).query
+        if not raw:
+            return {}
+        pairs = parse_qsl(raw, keep_blank_values=True)
+        if len(pairs) > MAX_QUERY_PARAMS:
+            raise ApiError(400, "too many query parameters")
+        query = {}
+        for key, value in pairs:
+            if len(value) > MAX_QUERY_VALUE:
+                raise ApiError(400, "query parameter %s is too long" % key[:32])
+            query.setdefault(key, value)
+        return query
+
+    def request_scheme(self):
+        """Honour the proxy's scheme header; default to https in production."""
+        forwarded = (self.headers.get("X-Forwarded-Proto") or "").split(",")[0].strip().lower()
+        if forwarded in ("http", "https"):
+            return forwarded
+        host = self.headers.get("Host", "")
+        return "http" if host.startswith("127.0.0.1") or host.startswith("localhost") else "https"
+
+    def read_body(self, allow_empty=False):
         # Any failure below leaves unread bytes on the socket, which would
         # desync a keep-alive connection — close it instead of reusing it.
         # The flag is restored only once the whole body has been consumed.
@@ -551,6 +890,9 @@ class StarHandler(BaseHTTPRequestHandler):
             raise ApiError(411, "Content-Length is required")
         raw_length = self.headers.get("Content-Length")
         if raw_length is None:
+            if allow_empty:
+                self.close_connection = keep_alive
+                return None
             raise ApiError(411, "Content-Length is required")
         try:
             length = int(raw_length)
@@ -561,6 +903,9 @@ class StarHandler(BaseHTTPRequestHandler):
         if length > MAX_BODY:
             raise ApiError(413, "request body exceeds %d bytes" % MAX_BODY)
         if length == 0:
+            if allow_empty:
+                self.close_connection = keep_alive
+                return None
             raise ApiError(400, "request body is required")
         raw = self.rfile.read(length)
         if len(raw) != length:
@@ -578,9 +923,13 @@ class StarHandler(BaseHTTPRequestHandler):
             path = path.rstrip("/")
 
         allowed = PATHS.get(path)
-        if allowed is None:
-            self.send_error_json(404, "unknown endpoint: %s" % path)
+        if allowed is not None:
+            self.dispatch_legacy(method, path, allowed)
             return
+        self.dispatch_automation(method, path)
+
+    def dispatch_legacy(self, method, path, allowed):
+        """The original five endpoints, with their original semantics."""
         if method not in allowed:
             self.send_json(405, {"error": "method not allowed", "status": 405,
                                  "allow": sorted(allowed)},
@@ -605,11 +954,74 @@ class StarHandler(BaseHTTPRequestHandler):
             return
         self.send_json(status, payload)
 
+    def dispatch_automation(self, method, path):
+        found, allowed = match_automation(method, path)
+        if not allowed:
+            if JOB_PATH_RE.match(path):
+                self.send_error_json(404, "unknown job")
+                return
+            self.send_error_json(404, "unknown endpoint: %s" % path)
+            return
+        if method != "OPTIONS" and found is None:
+            self.send_json(405, {"error": "method not allowed", "status": 405,
+                                 "allow": sorted(allowed)},
+                           {"Allow": ", ".join(sorted(allowed))})
+            return
+        if not self.same_origin_ok():
+            self.send_error_json(403, "cross-origin request rejected")
+            return
+        if not self.host_ok():
+            self.send_error_json(403, "host not allowed")
+            return
+        if method == "OPTIONS":
+            self.send_json(204, {}, {"Allow": ", ".join(sorted(allowed))})
+            return
+
+        handler, params, requires_intent = found
+        if requires_intent and not self.intent_ok():
+            self.send_error_json(
+                403, "missing or wrong %s header" % INTENT_HEADER,
+                required_header={INTENT_HEADER: INTENT_VALUE})
+            return
+        if AUTOMATION_IMPORT_ERROR is not None:
+            self.send_error_json(503, "automation modules failed to load on this server")
+            return
+
+        try:
+            body = None
+            if method in ("POST", "PUT"):
+                # Cancel and retry are intentionally body-optional: an empty
+                # POST is the natural thing for a button to send.
+                body = self.read_body(allow_empty=True)
+            ctx = RequestContext(self.server, method, path, params,
+                                 self.parse_query(), body,
+                                 self.headers.get("Host", ""), self.request_scheme())
+            status, payload = handler(ctx)
+        except ApiError as exc:
+            self.send_error_json(exc.status, exc.message, **exc.extra)
+            return
+        except Exception as exc:
+            translated = _translate(exc)
+            if translated is not None:
+                self.send_error_json(translated.status, translated.message,
+                                     **translated.extra)
+                return
+            if star_automation is not None and isinstance(exc, StateError):
+                self.send_error_json(503, "state directory is unavailable: %s" % exc)
+                return
+            self.log_message("unhandled error on %s %s: %r", method, path, exc)
+            self.send_error_json(500, "internal server error")
+            return
+        self.send_json(status, payload)
+
     def do_GET(self):
         self.dispatch("GET")
 
     def do_POST(self):
         self.dispatch("POST")
+
+    def do_PUT(self):
+        self.dispatch("PUT")
 
     def do_OPTIONS(self):
         self.dispatch("OPTIONS")
@@ -619,13 +1031,46 @@ class StarServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
-    def __init__(self, address, store):
+    def __init__(self, address, store, state_dir=None, automation=None,
+                 start_threads=True):
         super().__init__(address, StarHandler)
         self.store = store
+        self.state_dir = state_dir
+        self.start_automation_threads = start_threads
+        self._automation = automation
+        self._automation_lock = threading.Lock()
+
+    def automation_service(self):
+        """Built on first use, never at import or at server construction.
+
+        That laziness is what keeps the original endpoints (and their tests)
+        from ever touching /var/lib/star: a server that only serves
+        /api/stats never creates a state directory at all.
+        """
+        if self._automation is not None:
+            return self._automation
+        with self._automation_lock:
+            if self._automation is None:
+                if AUTOMATION_IMPORT_ERROR is not None:
+                    raise ApiError(503, "automation modules are unavailable")
+                self._automation = star_automation.AutomationService(
+                    self.store.root, state_dir=self.state_dir,
+                    start_threads=self.start_automation_threads)
+        return self._automation
+
+    def server_close(self):
+        if self._automation is not None:
+            try:
+                self._automation.close()
+            except Exception:  # noqa: BLE001 - shutdown must not raise
+                pass
+        super().server_close()
 
 
-def create_server(root, host=HOST, port=PORT):
-    return StarServer((host, port), Store(root))
+def create_server(root, host=HOST, port=PORT, state_dir=None, automation=None,
+                  start_threads=True):
+    return StarServer((host, port), Store(root), state_dir=state_dir,
+                      automation=automation, start_threads=start_threads)
 
 
 def main(argv=None):

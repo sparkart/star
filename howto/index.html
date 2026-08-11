@@ -1,224 +1,672 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>📘 Star Guidebook</title>
-  <link rel="stylesheet" href="/shared.css">
-  <meta name="robots" content="noindex">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="robots" content="noindex">
+<meta name="description" content="คู่มือผู้ดูแลระบบ Star Content Ops — ตั้งค่าผู้ให้บริการ รันไปป์ไลน์ ตารางเวลา ข้อจำกัดการเผยแพร่ การแก้ปัญหา และความปลอดภัย">
+<title>คู่มือระบบ · Star Content Ops</title>
+
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23e0b768' d='M12 1.5c.35 4.6 2.4 7.4 6.9 8.3-4.5.9-6.55 3.7-6.9 8.3-.35-4.6-2.4-7.4-6.9-8.3 4.5-.9 6.55-3.7 6.9-8.3Z'/%3E%3C/svg%3E">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300..600,0..1,0&display=block">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/workspace.css">
 </head>
 <body>
 
-<button class="hamburger" id="hamburger" aria-label="Toggle sidebar" aria-expanded="false">☰</button>
+<a class="skip-link" href="#workspace">ข้ามไปยังเนื้อหาหลัก</a>
 
-<aside class="sidebar" id="sidebar">
-  <a href="/" class="brand">✨ Star</a>
-  <ul class="nav-links">
-    <li><a href="/">🏠 Home</a></li>
-    <li><a href="/howto/" class="active">📚 Guidebook</a></li>
-    <li><a href="/content/">📊 Content</a></li>
-    <li><a href="/automation/">🤖 Automation</a></li>
-  </ul>
-  <div class="sub-nav" id="subNav"></div>
-</aside>
+<!-- ── Top bar ─────────────────────────────────────────── -->
+<header class="topbar">
+  <button class="icon-btn hamburger" id="hamburger" type="button"
+          aria-label="เปิดเมนูนำทาง" aria-expanded="false" aria-controls="sidebar">
+    <span class="ms" aria-hidden="true">menu</span>
+  </button>
 
-<main class="main">
+  <a href="/" class="brand" aria-label="Star — หน้าแรก">
+    <svg class="brand-mark" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+      <path d="M12 1.5c.35 4.6 2.4 7.4 6.9 8.3v0c-4.5.9-6.55 3.7-6.9 8.3-.35-4.6-2.4-7.4-6.9-8.3v0c4.5-.9 6.55-3.7 6.9-8.3Z" fill="currentColor"/>
+      <circle cx="19.6" cy="17.4" r="1.5" fill="currentColor" opacity=".6"/>
+      <circle cx="5.2" cy="4.6" r="1" fill="currentColor" opacity=".45"/>
+    </svg>
+    <span class="brand-name">Star</span>
+    <span class="brand-sub">Content Ops</span>
+  </a>
 
-<h1>📘 Star Guidebook</h1>
-<p><em>คู่มือฉบับสมบูรณ์ — ระบบผลิตคอนเทนต์ดูดวงอัตโนมัติด้วย AI</em></p>
+  <div class="topbar-spacer"></div>
 
-<hr>
+  <div class="meta-chip">
+    <span class="ms" aria-hidden="true">menu_book</span>
+    <span>คู่มือผู้ดูแลระบบ</span>
+  </div>
 
-<h2 id="overview">📊 ภาพรวม</h2>
-<p>Star คือระบบผลิตคอนเทนต์ดูดวงอัตโนมัติ (AI Horoscope Affiliate Pipeline) ที่ใช้ Swiss Ephemeris คำนวณตำแหน่งดาวจริง + AI เขียนบทภาษาไทย + TTS แปลงเป็นเสียงพากย์ โดยมีเป้าหมายสร้างรายได้จาก Affiliate แบบไม่ต้องทำคอนเทนต์เองทุกวัน</p>
+  <a class="icon-btn" href="/automation/" aria-label="ไปที่ศูนย์ควบคุมระบบอัตโนมัติ"
+     title="ศูนย์ควบคุมระบบอัตโนมัติ">
+    <span class="ms" aria-hidden="true">bolt</span>
+  </a>
+</header>
 
-<p><strong>องค์ประกอบหลัก:</strong></p>
-<ul>
-  <li>🔮 <strong>Astrology Engine</strong> — คำนวณดวงด้วย Swiss Ephemeris (pyswisseph)</li>
-  <li>⚙️ <strong>AI Pipeline</strong> — DeepSeek/Claude เขียนบท + Google Chirp3 TTS</li>
-  <li>🎬 <strong>Video Pipeline</strong> — CapCut automation + FFmpeg render</li>
-  <li>💰 <strong>Monetization</strong> — Affiliate links + โซเชียลมีเดีย</li>
-</ul>
+<div class="shell">
 
-<h2 id="astro-engine">🔮 Astrology Engine</h2>
-<p>หัวใจของระบบคือการคำนวณดวงที่แม่นยำระดับวิทยาศาสตร์ด้วย <strong>Swiss Ephemeris</strong> ซึ่งเป็นไลบรารีมาตรฐานที่นักโหราศาสตร์มืออาชีพใช้ทั่วโลก</p>
+  <!-- ── Sidebar ───────────────────────────────────────── -->
+  <aside class="sidebar" id="sidebar" aria-label="เมนูนำทางหลัก">
+    <nav class="nav-links" aria-label="ส่วนงาน">
+      <span class="nav-group-label">งานผลิต</span>
+      <a href="/">
+        <span class="ms" aria-hidden="true">calendar_month</span><span>ปฏิทินการผลิต</span>
+      </a>
+      <a href="/content/">
+        <span class="ms" aria-hidden="true">folder_open</span><span>คลังคอนเทนต์</span>
+      </a>
+      <span class="nav-group-label">ระบบ</span>
+      <a href="/automation/">
+        <span class="ms" aria-hidden="true">bolt</span><span>ระบบอัตโนมัติ</span>
+      </a>
+      <a href="/howto/" class="active" aria-current="page">
+        <span class="ms" aria-hidden="true">menu_book</span><span>คู่มือระบบ</span>
+      </a>
+    </nav>
 
-<h3>สิ่งที่คำนวณได้</h3>
-<ul>
-  <li>ตำแหน่งดาว 10 ดวง (อาทิตย์ จันทร์ อังคาร พุธ เสาร์ ราหู ฯลฯ)</li>
-  <li>ราศีที่ดาวสถิต (Aries, Taurus, ... Pisces)</li>
-  <li>เรือนที่ดาวอยู่ (House 1-12)</li>
-  <li>Aspects ระหว่างดาว (Conjunction, Trine, Square, Opposition)</li>
-  <li>คะแนน 4 ด้าน: การงาน, การเงิน, ความรัก, สุขภาพ</li>
-</ul>
+    <div class="sub-nav" id="subNav"></div>
 
-<h3>ไฟล์สำคัญ</h3>
-<ul>
-  <li><code>astro_daily_pro.py</code> — คำนวณดวงรายวันจาก Swiss Ephemeris</li>
-  <li><code>daily_horoscope_v2.py</code> — แปลงข้อมูลดาราศาสตร์เป็นคะแนน 4 ด้าน 7 วันเกิด</li>
-</ul>
+    <div class="sidebar-foot">
+      <div class="legend-title">สถานะของงาน</div>
+      <ul class="legend">
+        <li><i class="legend-dot is-done" aria-hidden="true"></i>สำเร็จ</li>
+        <li><i class="legend-dot is-test" aria-hidden="true"></i>กำลังทำงาน</li>
+        <li><i class="legend-dot is-partial" aria-hidden="true"></i>ติดเงื่อนไข</li>
+        <li><i class="legend-dot is-none" aria-hidden="true"></i>ล้มเหลว</li>
+      </ul>
+    </div>
+  </aside>
+  <div class="nav-scrim" id="nav-scrim" hidden></div>
 
-<h2 id="ai-pipeline">⚙️ AI Pipeline</h2>
-<p>เมื่อได้ข้อมูลดวงแล้ว ขั้นตอนต่อไปคือการแปลงเป็นบทภาษาไทยที่อ่านสนุกและเป็นธรรมชาติ</p>
+  <!-- ── Main ──────────────────────────────────────────── -->
+  <main class="main" id="app">
 
-<h3>AI Writer</h3>
-<ul>
-  <li><strong>DeepSeek (หลัก)</strong> — <code>horoscope_ai_writer_v2.py</code> เขียนบทภาษาไทย ต้นทุน ~฿0.016/บท</li>
-  <li><strong>Claude (พรีเมียม)</strong> — <code>ai_writer_claude.py</code> คุณภาพสูงกว่า แต่ต้นทุนสูงกว่า</li>
-  <li><strong>Fallback</strong> — template สำรองกรณี API ล่ม</li>
-</ul>
+    <div class="workspace-head" id="workspace">
+      <div class="workspace-title">
+        <span class="eyebrow">Runbook</span>
+        <h1>คู่มือระบบ Star Content Ops</h1>
+        <p class="workspace-desc">
+          คู่มือปฏิบัติงานที่ตรงกับโค้ดที่ติดตั้งจริง ไม่มีฟีเจอร์ที่ยังไม่ได้ทำ
+          ทุกคำสั่งและทุกเส้นทาง API ในหน้านี้อ่านได้จาก <code class="inline">star_api.py</code>
+          และโมดูล <code class="inline">star_automation.py</code>
+        </p>
+      </div>
+    </div>
 
-<h3>TTS (Text-to-Speech)</h3>
-<ul>
-  <li><strong>Google Chirp3 HD</strong> — เสียงไทยธรรมชาติ ฟังแล้วไม่รู้ว่า AI</li>
-  <li>ปรับ speaking_rate ได้ (0.85-1.05) ให้ฟัง "เคลิ้ม"</li>
-</ul>
+    <!-- ══ 01 · Quick start ═══════════════════════════════ -->
+    <section class="doc-section" id="quickstart" aria-labelledby="quickstart-h">
+      <div class="section-head">
+        <h2 id="quickstart-h" data-nav-label="เริ่มต้นใช้งาน">
+          <span class="section-index" aria-hidden="true">01</span>
+          <span>เริ่มต้นใช้งาน</span>
+        </h2>
+        <span class="section-aside">ครั้งแรกใช้เวลาประมาณ 15 นาที</span>
+      </div>
 
-<h2 id="brand-strategy">🎯 Brand Strategy</h2>
-<p>การสร้างแบรนด์ดูดวงให้แตกต่างจากคู่แข่ง ด้วยจุดแข็ง "แม่นด้วยวิทยาศาสตร์" ไม่ใช่ "มโนแบบหมอดู"</p>
+      <div class="callout callout-accent">
+        <span class="ms" aria-hidden="true">rocket_launch</span>
+        <div class="callout-body">
+          <div class="callout-title">ลำดับที่แนะนำ</div>
+          <p>
+            ตั้งค่าผู้ให้บริการให้ครบก่อน แล้วรันโหมดซ้อมหนึ่งรอบเพื่อดูว่าติดเงื่อนไขอะไรบ้าง
+            ค่อยเปิดโหมดจริง และเปิดตารางเวลาเป็นขั้นสุดท้าย
+          </p>
+        </div>
+      </div>
 
-<h3>จุดขาย</h3>
-<ul>
-  <li>ใช้ Swiss Ephemeris จริง — ไม่ใช่ Random</li>
-  <li>AI เขียนบทเฉพาะบุคคล — ไม่ใช่ Template ซ้ำ</li>
-  <li>เสียงพากย์ธรรมชาติ — ไม่ใช่ TTS หุ่นยนต์</li>
-  <li>ผลิตอัตโนมัติ — สเกลได้ไม่จำกัด</li>
-</ul>
+      <ol class="flow">
+        <li class="flow-step">
+          <div class="flow-body">
+            <div class="flow-title">เข้าสู่ระบบผ่าน Basic Auth ของ nginx</div>
+            <p class="flow-desc">
+              ทั้งไซต์อยู่หลัง Basic Auth อยู่แล้ว API ทำงานที่
+              <code class="inline">127.0.0.1:9001</code> และรับเฉพาะคำขอจากต้นทางเดียวกันเท่านั้น
+            </p>
+          </div>
+        </li>
+        <li class="flow-step">
+          <div class="flow-body">
+            <div class="flow-title">ล็อกอิน Claude CLI บนเซิร์ฟเวอร์</div>
+            <p class="flow-desc">
+              รัน <code class="inline">claude login</code> ในบัญชีผู้ใช้ที่รันเซอร์วิส
+              ขั้นตอนนี้ทำผ่านหน้าเว็บไม่ได้โดยตั้งใจ
+            </p>
+          </div>
+        </li>
+        <li class="flow-step">
+          <div class="flow-body">
+            <div class="flow-title">ตั้งค่าผู้ให้บริการที่เหลือในศูนย์ควบคุม</div>
+            <p class="flow-desc">
+              เปิด <a href="/automation/#providers">ศูนย์ควบคุม › การเชื่อมต่อผู้ให้บริการ</a>
+              แล้วกรอกค่าที่ต้องใช้ตามหัวข้อถัดไป
+            </p>
+          </div>
+        </li>
+        <li class="flow-step">
+          <div class="flow-body">
+            <div class="flow-title">รันโหมดซ้อมหนึ่งวัน</div>
+            <p class="flow-desc">
+              เลือกวันที่วันเดียว วันเกิดครบ 7 วัน ขั้นตอน
+              <code class="inline">astro → script → audio → video</code>
+              และเปิดโหมดซ้อมไว้ ผลลัพธ์จะบอกว่าขาดเงื่อนไขอะไร
+            </p>
+          </div>
+        </li>
+        <li class="flow-step">
+          <div class="flow-body">
+            <div class="flow-title">ปิดโหมดซ้อมเมื่อไม่มีเงื่อนไขค้าง</div>
+            <p class="flow-desc">
+              งานจริงจะเขียนไฟล์ลงในโปรเจกต์และมีค่าใช้จ่ายตามผู้ให้บริการที่ใช้
+            </p>
+          </div>
+        </li>
+      </ol>
+    </section>
 
-<h3>กลุ่มเป้าหมาย</h3>
-<ul>
-  <li>สายมู Gen Y/Z — ดูดวงใน TikTok/YouTube Shorts</li>
-  <li>คนทำงาน — ดูดวงการงาน/การเงินรายวัน</li>
-  <li>คนไทยในต่างประเทศ — เนื้อหาภาษาไทย</li>
-</ul>
+    <!-- ══ 02 · Providers ═════════════════════════════════ -->
+    <section class="doc-section" id="providers" aria-labelledby="providers-h">
+      <div class="section-head">
+        <h2 id="providers-h" data-nav-label="การตั้งค่าผู้ให้บริการ">
+          <span class="section-index" aria-hidden="true">02</span>
+          <span>การตั้งค่าผู้ให้บริการ</span>
+        </h2>
+        <span class="section-aside">8 รายการ</span>
+      </div>
 
-<h2 id="monetization">💰 Monetization</h2>
-<p>โมเดลรายได้ของ Star มีหลายชั้น:</p>
+      <div class="prose">
+        <p>
+          ค่าลับทุกชิ้นถูกเขียนลงไดเรกทอรีสถานะด้วยสิทธิ์ <code>0600</code>
+          (ไดเรกทอรีเป็น <code>0700</code>) และ API จะไม่ส่งค่ากลับมาแสดงไม่ว่ากรณีใด
+          ถ้าต้องการเปลี่ยนค่า ให้กรอกค่าใหม่ทับ ระบบไม่มีทางอ่านค่าเดิมมาเติมให้
+        </p>
+      </div>
 
-<h3>ชั้นที่ 1: Affiliate (ปัจจุบัน)</h3>
-<ul>
-  <li>แทรกลิงก์สินค้ามงคลในวิดีโอ (กำไลหิน, สร้อย, เครื่องราง)</li>
-  <li>Shopee/TikTok Affiliate</li>
-  <li>รายได้ต่อวิดีโอ: ~฿50-500 ขึ้นอยู่กับยอดวิว</li>
-</ul>
+      <div class="card-grid">
 
-<h3>ชั้นที่ 2: โซเชียลมีเดีย (เร็วๆ นี้)</h3>
-<ul>
-  <li>YouTube Shorts — monetization จากยอดวิว</li>
-  <li>TikTok Creator Fund</li>
-  <li>LINE OA — subscription รายเดือน</li>
-</ul>
+        <article class="panel-card is-flush">
+          <div class="panel-card-head"><h3>Claude CLI</h3><span class="chip chip-ok">อัตโนมัติ</span></div>
+          <div class="panel-card-body prose">
+            <p>ใช้เขียนบทภาษาไทย ยืนยันตัวตนด้วยการล็อกอิน CLI บนเซิร์ฟเวอร์</p>
+            <ul>
+              <li>รัน <code>claude login</code> ในบัญชีผู้ใช้ที่รันเซอร์วิส</li>
+              <li>ตั้ง <code>CLAUDE_CONFIG_DIR</code> ถ้า home ของผู้ใช้เขียนไม่ได้</li>
+              <li>ใช้สิทธิ์แบบ subscription ไม่ใช่ API key รายครั้ง</li>
+            </ul>
+            <p>
+              ระบบนี้ <strong>ไม่รับ session token ของ Claude ผ่านเบราว์เซอร์</strong>
+              การกดปุ่ม "ทดสอบ" จะสั่ง <code>claude auth status</code> พร้อมกำหนดเวลาสูงสุด 20 วินาที
+            </p>
+          </div>
+        </article>
 
-<h3>ชั้นที่ 3: Licensing (อนาคต)</h3>
-<ul>
-  <li>ขาย API ให้เว็บดูดวงอื่น</li>
-  <li>White-label ให้เอเจนซี่</li>
-</ul>
+        <article class="panel-card is-flush">
+          <div class="panel-card-head"><h3>Google Cloud TTS</h3><span class="chip chip-ok">อัตโนมัติ</span></div>
+          <div class="panel-card-body prose">
+            <p>ใช้สังเคราะห์เสียงพากย์ภาษาไทย</p>
+            <ul>
+              <li>เปิดใช้งาน Cloud Text-to-Speech API ในโปรเจกต์ Google Cloud</li>
+              <li>สร้าง service account key แล้ววาง JSON ทั้งก้อนลงในฟอร์ม</li>
+              <li>หรือระบุ path ของไฟล์ที่อัปโหลดไว้แล้ว โดยต้องอยู่ในไดเรกทอรีสถานะเท่านั้น</li>
+            </ul>
+            <p>
+              การกด "ทดสอบ" ตรวจเฉพาะโครงสร้าง JSON แบบออฟไลน์
+              ส่วน "ทดสอบจริง" จะเรียก ListVoices ซึ่งเป็นคำสั่งอ่านข้อมูลที่ไม่มีค่าใช้จ่าย
+              และ<strong>ไม่มีการสังเคราะห์เสียงระหว่างทดสอบ</strong>
+            </p>
+            <p>ถ้าไม่ได้ตั้งค่าไว้ ระบบจะใช้ gTTS เป็นทางเลือกฟรีที่คุณภาพต่ำกว่า</p>
+          </div>
+        </article>
 
-<h2 id="architecture">🏗️ Architecture</h2>
-<p>โครงสร้างระบบทั้งหมด:</p>
+        <article class="panel-card is-flush">
+          <div class="panel-card-head"><h3>YouTube</h3><span class="chip chip-ok">อัตโนมัติ</span></div>
+          <div class="panel-card-body prose">
+            <p>อัปโหลดวิดีโอผ่าน YouTube Data API v3</p>
+            <ul>
+              <li>เปิดใช้งาน YouTube Data API v3 และตั้งค่า OAuth consent screen</li>
+              <li>ขอบเขตที่ใช้คือ <code>youtube.upload</code></li>
+              <li>วาง OAuth client JSON แล้วกด "เชื่อมต่อบัญชี" เพื่อเริ่ม OAuth</li>
+              <li>ต้องลงทะเบียน Redirect URI ที่หน้าการ์ดแสดงไว้ใน Google Cloud ก่อน</li>
+            </ul>
+            <p>
+              ระบบใช้ PKCE และ state แบบใช้ครั้งเดียวอายุ 10 นาที
+              วิดีโอที่อัปโหลดถูกตั้งเป็น <code>private</code> เสมอ
+              โควตาอัปโหลดของ API อยู่ที่ประมาณ 6 คลิปต่อวันต่อโปรเจกต์
+            </p>
+          </div>
+        </article>
 
-<pre><code>┌─────────────────────────────────┐
-│   Swiss Ephemeris (pyswisseph)  │
-│   → astro_daily_pro.py          │
-└──────────┬──────────────────────┘
-           ▼
-┌─────────────────────────────────┐
-│   Data Processor                │
-│   → daily_horoscope_v2.py       │
-│   → 4 scores + 7 birthdays      │
-└──────────┬──────────────────────┘
-           ▼
-┌─────────────────────────────────┐
-│   AI Writer                     │
-│   → horoscope_ai_writer_v2.py   │
-│   → DeepSeek / Claude           │
-└──────────┬──────────────────────┘
-           ▼
-┌─────────────────────────────────┐
-│   TTS Engine                    │
-│   → Google Chirp3 HD            │
-│   → MP3 output                  │
-└──────────┬──────────────────────┘
-           ▼
-┌─────────────────────────────────┐
-│   Video Render                  │
-│   → CapCut JSON → cutcli → MP4  │
-└──────────┬──────────────────────┘
-           ▼
-┌─────────────────────────────────┐
-│   Publish                       │
-│   → YouTube / TikTok / LINE     │
-└─────────────────────────────────┘</code></pre>
+        <article class="panel-card is-flush">
+          <div class="panel-card-head"><h3>Facebook Page</h3><span class="chip chip-ok">อัตโนมัติ</span></div>
+          <div class="panel-card-body prose">
+            <p>โพสต์วิดีโอขึ้นเพจผ่าน Graph API</p>
+            <ul>
+              <li>ต้องเป็นผู้ดูแลเพจนั้น</li>
+              <li>ใช้ Page access token แบบ long-lived พร้อมสิทธิ์
+                  <code>pages_manage_posts</code> และ <code>pages_read_engagement</code></li>
+              <li>เพจที่ไม่ได้เป็นเจ้าของต้องผ่าน App Review ก่อน</li>
+            </ul>
+            <p>"ทดสอบจริง" จะเรียก <code>/me?fields=id,name</code> เท่านั้น</p>
+          </div>
+        </article>
 
-<h2 id="growth">📈 Growth</h2>
-<p>แผนการเติบโตใน 6-12 เดือน:</p>
+        <article class="panel-card is-flush">
+          <div class="panel-card-head"><h3>LINE Messaging API</h3><span class="chip chip-ok">อัตโนมัติ</span></div>
+          <div class="panel-card-body prose">
+            <p>ส่งข้อความและวิดีโอแบบ broadcast หรือ push</p>
+            <ul>
+              <li>ต้องมี LINE Official Account ที่เปิด Messaging API</li>
+              <li>ใช้ channel access token แบบ long-lived</li>
+              <li>ข้อความ broadcast กินโควตารายเดือนของแพ็กเกจ</li>
+            </ul>
+            <p>
+              LINE ต้องการ URL ของสื่อที่เข้าถึงได้จากภายนอก
+              จึงต้องตั้งค่า Cloudflare R2 และเลือก R2 เป็นปลายทางด้วย
+              มิฉะนั้นงานจะหยุดที่สถานะ "ติดเงื่อนไข"
+            </p>
+          </div>
+        </article>
 
-<ol>
-  <li><strong>Bulk Generation</strong> — ผลิต 180 วัน × 7 วันเกิด = 1,260 วิดีโอ ต่อเดือน</li>
-  <li><strong>Multi-Voice</strong> — ใช้เสียง Chirp3 หลายแบบ ลด pattern detection</li>
-  <li><strong>Auto-Upload</strong> — Publish อัตโนมัติไปทุกแพลตฟอร์ม</li>
-  <li><strong>A/B Testing</strong> — ทดลอง hook/thumbnail หลายแบบ หา best performer</li>
-  <li><strong>Analytics Dashboard</strong> — ติดตามยอดวิว รายได้ ต่อวิดีโอ</li>
-</ol>
+        <article class="panel-card is-flush">
+          <div class="panel-card-head"><h3>Cloudflare R2</h3><span class="chip chip-ok">อัตโนมัติ</span></div>
+          <div class="panel-card-body prose">
+            <p>ที่เก็บสื่อสาธารณะ และเป็นต้นทาง URL ให้ LINE</p>
+            <ul>
+              <li>ต้องมี bucket และ API token แบบ S3 ที่อ่านเขียนได้</li>
+              <li>ต้องระบุ public base URL (custom domain หรือ r2.dev)</li>
+            </ul>
+            <p>
+              ไฟล์ถูกอัปโหลดไปที่ <code>star/&lt;วันที่&gt;/&lt;วันเกิด&gt;.mp4</code>
+              "ทดสอบจริง" จะเรียก HeadBucket เท่านั้น
+            </p>
+          </div>
+        </article>
 
-<h2 id="faq">❓ FAQ</h2>
+        <article class="panel-card is-flush">
+          <div class="panel-card-head"><h3>TikTok</h3><span class="chip chip-warn">กึ่งอัตโนมัติ</span></div>
+          <div class="panel-card-body prose">
+            <p>
+              Content Posting API ต้องผ่านการอนุมัติแอปนักพัฒนา
+              แอปที่ยังไม่ผ่านการตรวจสอบโพสต์ได้เฉพาะแบบส่วนตัวหรือแบบร่างเท่านั้น
+            </p>
+            <p>
+              ระบบนี้จึง<strong>ไม่อัปโหลดขึ้น TikTok ให้</strong>
+              แต่จะเตรียมชุดไฟล์สำหรับอัปโหลดเองไว้ที่
+              <code>output/&lt;วันที่&gt;/handoff/tiktok/</code>
+              และจะไม่รายงานว่าเผยแพร่สำเร็จ
+            </p>
+          </div>
+        </article>
 
-<h3>ทำไมต้องใช้ Swiss Ephemeris?</h3>
-<p>เพราะเป็นไลบรารีดาราศาสตร์มาตรฐานที่ NASA และนักโหราศาสตร์มืออาชีพใช้ — คำนวณตำแหน่งดาวแม่นระดับวินาที ไม่ใช่ Random เหมือนเว็บดูดวงทั่วไป</p>
+        <article class="panel-card is-flush">
+          <div class="panel-card-head"><h3>Shopee</h3><span class="chip chip-warn">ทำเอง</span></div>
+          <div class="panel-card-body prose">
+            <p>
+              Shopee ไม่มี API สาธารณะสำหรับเผยแพร่วิดีโอคอนเทนต์แบบ affiliate
+              จึงต้องอัปโหลดเองใน Shopee Video / Affiliate ทุกครั้ง
+            </p>
+            <p>
+              ระบบเตรียมไฟล์และแคปชั่นไว้ที่
+              <code>output/&lt;วันที่&gt;/handoff/shopee/</code> เท่านั้น
+            </p>
+          </div>
+        </article>
 
-<h3>ใช้ AI อะไรเขียนบท?</h3>
-<p>ปัจจุบันใช้ DeepSeek เป็นหลัก (ถูกมาก ~฿0.016/บท) และกำลังทดลอง Claude สำหรับบทคุณภาพสูง ระบบมี fallback template กรณี API ล่ม</p>
+      </div>
+    </section>
 
-<h3>เสียงพากย์ธรรมชาติแค่ไหน?</h3>
-<p>Google Chirp3 HD เป็น TTS ที่ดีที่สุดสำหรับภาษาไทย — คนฟังไม่รู้ว่าเป็น AI ถ้าไม่บอกล่วงหน้า</p>
+    <!-- ══ 03 · Pipeline stages ═══════════════════════════ -->
+    <section class="doc-section" id="stages" aria-labelledby="stages-h">
+      <div class="section-head">
+        <h2 id="stages-h" data-nav-label="ขั้นตอนของไปป์ไลน์">
+          <span class="section-index" aria-hidden="true">03</span>
+          <span>ขั้นตอนของไปป์ไลน์</span>
+        </h2>
+        <span class="section-aside">5 ขั้นตอน เรียงตามลำดับเสมอ</span>
+      </div>
 
-<h3>ต้องลงทุนเท่าไหร่?</h3>
-<p>ต้นทุนต่ำมาก: DeepSeek ~฿0.016/บท + TTS ~฿0.02/นาที + Render ~฿0.01/วิดีโอ = <strong>~฿0.30/วิดีโอ</strong> — คุ้มทุนตั้งแต่เดือนแรก</p>
+      <div class="prose">
+        <p>
+          ขั้นตอนจะถูกจัดเรียงตามลำดับของไปป์ไลน์เสมอ ไม่ว่าจะเลือกในหน้าเว็บด้วยลำดับใด
+          และแต่ละขั้นตอนอ่านผลลัพธ์ของขั้นก่อนหน้าจากดิสก์
+          ดังนั้นการรันเฉพาะ <code>video</code> โดยยังไม่มีไฟล์เสียงจะทำให้งานหยุดที่ "ติดเงื่อนไข"
+        </p>
+      </div>
 
-<h3>เผยแพร่ที่ไหน?</h3>
-<p>YouTube Shorts, TikTok, LINE OA, Facebook — ครบทุกแพลตฟอร์มใน pipeline เดียว</p>
+      <div class="table-wrap">
+        <table class="data">
+          <caption class="visually-hidden">รายละเอียดของแต่ละขั้นตอนในไปป์ไลน์</caption>
+          <thead>
+            <tr>
+              <th scope="col">ขั้นตอน</th>
+              <th scope="col">สิ่งที่ทำจริง</th>
+              <th scope="col">ผลลัพธ์</th>
+              <th scope="col">เวลาสูงสุด</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">astro</th>
+              <td>
+                เรียก <code>scripts/pull_ephem.py</code> (Swiss Ephemeris)
+                แล้วส่งต่อให้ <code>scripts/generate_predictions.py</code>
+                ข้อมูลดาราศาสตร์คำนวณจริงทั้งหมด ไม่มีการสร้างข้อมูลปลอม
+              </td>
+              <td>
+                <code>content/raw_astro/&lt;วันที่&gt;.json</code><br>
+                <code>content/horoscope/&lt;วันที่&gt;/&lt;วันเกิด&gt;.json</code>
+              </td>
+              <td class="num">300 วิ</td>
+            </tr>
+            <tr>
+              <th scope="row">script</th>
+              <td>
+                เรียก Claude CLI ด้วย argv list พร้อม prompt ที่สร้างจากไฟล์คำทำนายของวันนั้น
+                ข้ามไฟล์ที่มีอยู่แล้วเว้นแต่เปิด force
+              </td>
+              <td><code>content/scripts/claude_&lt;วันที่&gt;_&lt;วันเกิด&gt;.txt</code></td>
+              <td class="num">300 วิ</td>
+            </tr>
+            <tr>
+              <th scope="row">audio</th>
+              <td>
+                ใช้ Google Cloud TTS เมื่อตั้งค่าไว้ มิฉะนั้นใช้ gTTS เป็นทางเลือกฟรี
+                อ่านบทจาก overrides ก่อน แล้วจึงอ่านจาก scripts
+              </td>
+              <td><code>output/&lt;วันที่&gt;/audio/&lt;วันเกิด&gt;.mp3</code></td>
+              <td class="num">300 วิ</td>
+            </tr>
+            <tr>
+              <th scope="row">video</th>
+              <td>
+                เรนเดอร์ด้วย ffmpeg เท่านั้น ขนาด 1080×1920 พร้อมข้อความภาษาไทย
+                ฟอนต์เลือกจากรายการที่กำหนดไว้ล่วงหน้าเท่านั้น
+              </td>
+              <td><code>output/&lt;วันที่&gt;/video/&lt;วันเกิด&gt;.mp4</code></td>
+              <td class="num">900 วิ</td>
+            </tr>
+            <tr>
+              <th scope="row">publish</th>
+              <td>
+                อัปโหลดไปยังปลายทางที่เลือก ปลายทางที่ทำอัตโนมัติไม่ได้จะได้ชุดไฟล์สำหรับอัปโหลดเอง
+              </td>
+              <td>
+                ผลลัพธ์รายปลายทาง หรือ
+                <code>output/&lt;วันที่&gt;/handoff/&lt;ปลายทาง&gt;/</code>
+              </td>
+              <td class="num">900 วิ</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
-</main>
+      <div class="callout callout-info">
+        <span class="ms" aria-hidden="true">tune</span>
+        <div class="callout-body">
+          <div class="callout-title">ข้อจำกัดของหนึ่งงาน</div>
+          <p>
+            ช่วงวันที่ยาวได้สูงสุด 31 วันต่อหนึ่งงาน
+            และระบบรันได้ครั้งละหนึ่งงานเท่านั้น
+            การสั่งงานใหม่ขณะมีงานทำงานอยู่จะได้ HTTP 409 พร้อมข้อมูลของงานที่กำลังทำงาน
+          </p>
+        </div>
+      </div>
+    </section>
 
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-  const hamburger = document.getElementById('hamburger');
-  const sidebar = document.getElementById('sidebar');
-  const subNav = document.getElementById('subNav');
-  
-  hamburger.addEventListener('click', function() {
-    const isOpen = sidebar.classList.toggle('sidebar-open');
-    hamburger.setAttribute('aria-expanded', isOpen);
-  });
-  
-  if (subNav) {
-    document.querySelectorAll('.main h2[id], .main h3[id]').forEach(function(heading) {
-      var link = document.createElement('a');
-      link.href = '#' + heading.id;
-      link.textContent = heading.textContent;
-      link.className = heading.tagName === 'H2' ? 'sub-main' : 'sub-child';
-      subNav.appendChild(link);
-    });
-  }
-  
-  var sections = document.querySelectorAll('.main h2[id]');
-  if (sections.length) {
-    var observer = new IntersectionObserver(function(entries) {
-      entries.forEach(function(entry) {
-        if (entry.isIntersecting) {
-          var id = entry.target.id;
-          var links = document.querySelectorAll('.sub-nav a');
-          links.forEach(function(l) { l.classList.remove('active'); });
-          var active = document.querySelector('.sub-nav a[href="#' + id + '"]');
-          if (active) active.classList.add('active');
-        }
-      });
-    }, { rootMargin: '-40% 0px -40% 0px' });
-    sections.forEach(function(sec) { observer.observe(sec); });
-  }
-});
-</script>
+    <!-- ══ 04 · Dry run vs production ═════════════════════ -->
+    <section class="doc-section" id="dryrun" aria-labelledby="dryrun-h">
+      <div class="section-head">
+        <h2 id="dryrun-h" data-nav-label="โหมดซ้อมกับโหมดจริง">
+          <span class="section-index" aria-hidden="true">04</span>
+          <span>โหมดซ้อมกับโหมดจริง</span>
+        </h2>
+        <span class="section-aside">dry_run</span>
+      </div>
+
+      <div class="table-wrap">
+        <table class="data">
+          <caption class="visually-hidden">ความแตกต่างระหว่างโหมดซ้อมและโหมดจริง</caption>
+          <thead>
+            <tr>
+              <th scope="col">หัวข้อ</th>
+              <th scope="col">โหมดซ้อม</th>
+              <th scope="col">โหมดจริง</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">เรียกผู้ให้บริการ</th>
+              <td>ไม่มีเลย</td>
+              <td>มี ตามขั้นตอนที่เลือก</td>
+            </tr>
+            <tr>
+              <th scope="row">เขียนไฟล์ลงโปรเจกต์</th>
+              <td>ไม่เขียน</td>
+              <td>เขียนแบบ atomic เมื่อขั้นตอนนั้นสำเร็จ</td>
+            </tr>
+            <tr>
+              <th scope="row">ค่าใช้จ่าย</th>
+              <td>ไม่มี</td>
+              <td>ตามผู้ให้บริการที่ใช้ (TTS คิดตามอักขระ, แพลตฟอร์มคิดตามโควตา)</td>
+            </tr>
+            <tr>
+              <th scope="row">เงื่อนไขที่ขาด</th>
+              <td>รายงานไว้ในผลลัพธ์ แต่ยังถือว่างานสำเร็จ</td>
+              <td>งานหยุดทันทีด้วยสถานะ "ติดเงื่อนไข"</td>
+            </tr>
+            <tr>
+              <th scope="row">สิ่งที่ได้กลับมา</th>
+              <td>รายการคำสั่งที่จะรันและไฟล์ที่จะสร้าง</td>
+              <td>ผลลัพธ์จริงของแต่ละขั้นตอนและรายการไฟล์ที่สร้าง</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout callout-accent">
+        <span class="ms" aria-hidden="true">verified_user</span>
+        <div class="callout-body">
+          <div class="callout-title">โหมดซ้อมเป็นขอบเขตจริง ไม่ใช่แค่ธง</div>
+          <p>
+            ในโหมดซ้อม โค้ดส่วน <code>execute()</code> ของแต่ละขั้นตอนไม่ถูกเรียกเลย
+            ระบบเรียกเฉพาะ <code>plan()</code> ซึ่งเป็นฟังก์ชันที่ไม่มีผลข้างเคียง
+            จึงไม่มีทางที่การซ้อมจะเผลอเรียกผู้ให้บริการได้
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ 05 · Scheduling ════════════════════════════════ -->
+    <section class="doc-section" id="scheduling" aria-labelledby="scheduling-h">
+      <div class="section-head">
+        <h2 id="scheduling-h" data-nav-label="ตารางเวลาอัตโนมัติ">
+          <span class="section-index" aria-hidden="true">05</span>
+          <span>ตารางเวลาอัตโนมัติ</span>
+        </h2>
+        <span class="section-aside">Asia/Bangkok</span>
+      </div>
+
+      <div class="prose">
+        <ul>
+          <li>ตารางเวลามีได้ชุดเดียว ทำงานวันละหนึ่งครั้งตามเวลากรุงเทพฯ</li>
+          <li><strong>ค่าเริ่มต้นคือปิดใช้งาน</strong> และค่าเริ่มต้นของ dry run คือเปิด</li>
+          <li>ป้องกันการรันซ้ำในวันเดียวกันด้วยคีย์หลักของตารางในฐานข้อมูล ไม่ใช่แค่การเช็คในหน่วยความจำ</li>
+          <li>ถ้าถึงเวลาแล้วมีงานอื่นทำงานอยู่ ระบบจะข้ามรอบนั้น ไม่ต่อคิวสะสม</li>
+          <li><strong>ไม่มีการลองใหม่อัตโนมัติ</strong> งานที่ล้มเหลวต้องสั่งทำใหม่ด้วยตนเอง</li>
+          <li>ตั้ง "วันที่เป้าหมาย" ให้เลื่อนไปข้างหน้าได้ เพื่อผลิตล่วงหน้า</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ══ 06 · Publishing constraints ════════════════════ -->
+    <section class="doc-section" id="publishing" aria-labelledby="publishing-h">
+      <div class="section-head">
+        <h2 id="publishing-h" data-nav-label="ข้อจำกัดการเผยแพร่">
+          <span class="section-index" aria-hidden="true">06</span>
+          <span>ข้อจำกัดการเผยแพร่</span>
+        </h2>
+        <span class="section-aside">อ่านก่อนเปิดโหมดจริง</span>
+      </div>
+
+      <div class="callout callout-warn">
+        <span class="ms" aria-hidden="true">front_hand</span>
+        <div class="callout-body">
+          <div class="callout-title">ระบบจะไม่อ้างว่าเผยแพร่สำเร็จถ้าไม่ได้เผยแพร่จริง</div>
+          <p>
+            ปลายทางที่ทำอัตโนมัติไม่ได้จะได้ผลลัพธ์เป็น
+            <code>manual_handoff</code> พร้อม <code>published: false</code> เสมอ
+            หน้าเว็บแสดงค่านี้ตามที่ API ส่งกลับมาโดยไม่ตีความใหม่
+          </p>
+        </div>
+      </div>
+
+      <div class="prose">
+        <ul>
+          <li><strong>YouTube</strong> — อัปโหลดเป็น <code>private</code> เสมอ ต้องเปลี่ยนเป็นสาธารณะเอง
+              โควตา API จำกัดที่ประมาณ 6 คลิปต่อวันต่อโปรเจกต์</li>
+          <li><strong>Facebook</strong> — โพสต์ผ่าน Page video API ความสามารถขึ้นกับสิทธิ์ของโทเคนและสถานะ App Review</li>
+          <li><strong>LINE</strong> — ต้องมี URL สาธารณะของสื่อ จึงต้องเปิดใช้ R2 คู่กันเสมอ
+              และ broadcast กินโควตารายเดือน</li>
+          <li><strong>R2</strong> — อัปโหลดไฟล์อย่างเดียว ไม่ได้ทำ CDN invalidation ให้</li>
+          <li><strong>TikTok</strong> — ต้องอัปโหลดเอง จนกว่าแอปนักพัฒนาจะผ่านการอนุมัติ</li>
+          <li><strong>Shopee</strong> — ต้องอัปโหลดเองเสมอ ไม่มี API สาธารณะรองรับ</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ══ 07 · Troubleshooting ═══════════════════════════ -->
+    <section class="doc-section" id="troubleshooting" aria-labelledby="troubleshooting-h">
+      <div class="section-head">
+        <h2 id="troubleshooting-h" data-nav-label="การแก้ปัญหา">
+          <span class="section-index" aria-hidden="true">07</span>
+          <span>การแก้ปัญหา</span>
+        </h2>
+        <span class="section-aside">อาการที่พบบ่อย</span>
+      </div>
+
+      <div class="table-wrap">
+        <table class="data">
+          <caption class="visually-hidden">อาการ สาเหตุ และวิธีแก้</caption>
+          <thead>
+            <tr>
+              <th scope="col">อาการ</th>
+              <th scope="col">สาเหตุที่เป็นไปได้</th>
+              <th scope="col">วิธีแก้</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">งานขึ้นสถานะ "ติดเงื่อนไข"</th>
+              <td>ขาดค่าตั้งค่าของผู้ให้บริการ หรือขาดไฟล์จากขั้นตอนก่อนหน้า</td>
+              <td>อ่านข้อความในช่อง safe_error ซึ่งระบุเงื่อนไขที่ขาดไว้ตรง ๆ แล้วแก้ตามนั้น</td>
+            </tr>
+            <tr>
+              <th scope="row">สั่งงานแล้วได้ HTTP 409</th>
+              <td>มีงานอยู่ในคิวหรือกำลังทำงาน</td>
+              <td>ยกเลิกงานเดิมก่อน หรือรอให้จบ ระบบจงใจให้รันได้ครั้งละหนึ่งงาน</td>
+            </tr>
+            <tr>
+              <th scope="row">งานค้างสถานะ "กำลังทำงาน" หลังรีสตาร์ต</th>
+              <td>เซอร์วิสถูกรีสตาร์ตระหว่างงานกำลังรัน</td>
+              <td>ระบบทำเครื่องหมายเป็นล้มเหลวให้อัตโนมัติตอนเริ่มเซอร์วิส แล้วสั่งทำใหม่ด้วยตนเอง</td>
+            </tr>
+            <tr>
+              <th scope="row">"ทดสอบจริง" ตอบว่าปิดการเชื่อมต่อ</th>
+              <td>เซอร์วิสรันด้วย <code>STAR_DISABLE_NETWORK=1</code></td>
+              <td>ตัวแปรนี้ใช้ในชุดทดสอบ ให้ถอดออกจาก environment ของเซอร์วิสจริง</td>
+            </tr>
+            <tr>
+              <th scope="row">ขั้นตอน astro ล้มเหลวทันที</th>
+              <td>ยังไม่ได้ติดตั้งโมดูล swisseph</td>
+              <td>ติดตั้ง <code>pyswisseph</code> ในสภาพแวดล้อมที่เซอร์วิสใช้</td>
+            </tr>
+            <tr>
+              <th scope="row">ขั้นตอน video ล้มเหลว</th>
+              <td>ไม่มี ffmpeg หรือไม่มีฟอนต์ไทยบนเครื่อง</td>
+              <td>ติดตั้ง ffmpeg และ <code>fonts-noto-core</code> หรือ <code>fonts-thai-tlwg</code></td>
+            </tr>
+            <tr>
+              <th scope="row">หน้าเว็บเตือนเรื่องสิทธิ์ไฟล์</th>
+              <td>ไฟล์ในไดเรกทอรีสถานะถูกแก้สิทธิ์ให้กว้างกว่าเจ้าของ</td>
+              <td>แก้กลับเป็น <code>chmod 600</code> สำหรับไฟล์ และ <code>chmod 700</code> สำหรับไดเรกทอรี</td>
+            </tr>
+            <tr>
+              <th scope="row">กดปุ่มแล้วได้ HTTP 403</th>
+              <td>คำขอไม่มีเฮดเดอร์ยืนยันเจตนา หรือมาจากต้นทางอื่น</td>
+              <td>ใช้งานผ่านหน้าเว็บนี้เท่านั้น สคริปต์ภายนอกต้องส่ง
+                  <code>X-Star-Intent: automation-control</code> ด้วย</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ══ 08 · Security ══════════════════════════════════ -->
+    <section class="doc-section" id="security" aria-labelledby="security-h">
+      <div class="section-head">
+        <h2 id="security-h" data-nav-label="ความปลอดภัย">
+          <span class="section-index" aria-hidden="true">08</span>
+          <span>ความปลอดภัย</span>
+        </h2>
+        <span class="section-aside">ที่บังคับใช้จริงในโค้ด</span>
+      </div>
+
+      <div class="prose">
+        <ul>
+          <li><strong>ต้นทางเดียวกันเท่านั้น</strong> — คำขอที่มีเฮดเดอร์ <code>Origin</code>
+              ต่างจาก <code>Host</code> จะถูกปฏิเสธด้วย 403</li>
+          <li><strong>เฮดเดอร์ยืนยันเจตนา</strong> — ทุกเส้นทางที่เปลี่ยนสถานะต้องส่ง
+              <code>X-Star-Intent: automation-control</code>
+              ซึ่งฟอร์มข้ามโดเมนส่งไม่ได้</li>
+          <li><strong>ข้อยกเว้นที่ตั้งใจ</strong> — หน้า callback ของ OAuth ไม่ต้องใช้เฮดเดอร์นี้
+              เพราะเป็นการเปลี่ยนหน้าจาก Google โดยตรง จึงใช้ค่า state
+              แบบเดาไม่ได้ ใช้ครั้งเดียว และหมดอายุใน 10 นาที เป็นเกราะแทน</li>
+          <li><strong>ไม่มี shell</strong> — ทุกคำสั่งภายนอกเรียกด้วย argv list
+              ไม่มี <code>shell=True</code> อยู่ในโค้ดฝั่งเซิร์ฟเวอร์เลย และมีเทสต์ตรวจข้อนี้</li>
+          <li><strong>ไม่มีพาธที่ผู้ใช้กำหนด</strong> — ไฟล์ credential ตั้งชื่อโดยระบบเท่านั้น
+              และพาธของไฟล์ key ต้องอยู่ในไดเรกทอรีสถานะ</li>
+          <li><strong>การกรองค่าลับ</strong> — ทุกข้อความที่เข้าสู่บันทึกงาน ผลลัพธ์ และคำตอบของ API
+              ผ่านตัวกรองกลางที่ปิดบังโทเคน คีย์ และบล็อก private key</li>
+          <li><strong>ขอบเขตที่จำกัดไว้</strong> — ขนาด body, จำนวนพารามิเตอร์, จำนวนงานและบันทึกที่คืนกลับ,
+              เวลาสูงสุดของแต่ละขั้นตอน, ช่วงวันที่ และจำนวนงานพร้อมกัน ถูกจำกัดทั้งหมด</li>
+          <li><strong>ไดเรกทอรีสถานะ</strong> — กำหนดด้วย <code>STAR_STATE_DIR</code>
+              ค่าเริ่มต้นบนเครื่องจริงคือ <code>/var/lib/star</code>
+              ไดเรกทอรีเป็น 0700 และไฟล์เป็น 0600</li>
+        </ul>
+      </div>
+
+      <div class="callout callout-warn">
+        <span class="ms" aria-hidden="true">shield</span>
+        <div class="callout-body">
+          <div class="callout-title">สิ่งที่ระบบนี้ตั้งใจไม่ทำ</div>
+          <p>
+            ไม่มี endpoint สำหรับรันคำสั่งใด ๆ ตามใจผู้ใช้
+            ไม่รับ session token ของ Claude ผ่านเบราว์เซอร์
+            ไม่ส่งค่าลับกลับมาแสดงในหน้าเว็บ
+            และไม่ลองงานใหม่เองโดยอัตโนมัติ
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <p class="ac-field-hint" style="margin:2rem 0 1rem">
+      กลับไปที่ <a href="/automation/">ศูนย์ควบคุมระบบอัตโนมัติ</a>
+      หรือ <a href="/">ปฏิทินการผลิต</a>
+    </p>
+
+  </main>
+</div>
+
+<div class="toast-region" id="toast-region" role="status" aria-live="polite"></div>
+
+<script src="/workspace.js" defer></script>
 
 </body>
 </html>

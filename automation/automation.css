@@ -1,0 +1,432 @@
+/* ══════════════════════════════════════════════════════════
+   Star — Automation Control Center
+   Scoped additions only. Surfaces, spacing, type and the gold
+   accent all come from /style.css and /workspace.css; this file
+   adds the components that exist nowhere else: provider cards,
+   the run form, the live progress track and the log stream.
+
+   Every rule is prefixed .ac- so it cannot collide with the
+   calendar or content pages.
+   ══════════════════════════════════════════════════════════ */
+
+/* ── status dots & pills ───────────────────────────────── */
+
+.ac-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--text-3);
+  box-shadow: 0 0 0 3px rgba(116, 128, 154, .12);
+}
+.ac-dot.is-ready          { background: var(--ok);     box-shadow: 0 0 0 3px rgba(87,185,138,.14); }
+.ac-dot.is-configured     { background: var(--info);   box-shadow: 0 0 0 3px rgba(122,162,227,.14); }
+.ac-dot.is-manual         { background: var(--warn);   box-shadow: 0 0 0 3px rgba(215,160,71,.14); }
+.ac-dot.is-error          { background: var(--danger); box-shadow: 0 0 0 3px rgba(221,107,98,.14); }
+.ac-dot.is-not_configured { background: var(--text-3); }
+
+/* Job-state colours, shared by chips, dots and the progress bar. */
+.ac-chip-queued    { border-color: var(--border-strong); color: var(--text-2); }
+.ac-chip-running   { border-color: rgba(122,162,227,.4);  color: var(--info); }
+.ac-chip-succeeded { border-color: rgba(87,185,138,.4);   color: var(--ok); }
+.ac-chip-failed    { border-color: rgba(221,107,98,.4);   color: var(--danger); }
+.ac-chip-cancelled { border-color: var(--border-strong);  color: var(--text-3); }
+.ac-chip-blocked   { border-color: rgba(215,160,71,.45);  color: var(--warn); }
+
+/* ── overview tiles ────────────────────────────────────── */
+
+.ac-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: .75rem;
+  margin-bottom: 1.25rem;
+}
+
+.ac-tile {
+  display: flex;
+  flex-direction: column;
+  gap: .2rem;
+  min-width: 0;
+  padding: .8rem .9rem;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.ac-tile-label {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  font-size: .72rem;
+  letter-spacing: .04em;
+  color: var(--text-3);
+}
+.ac-tile-label .ms { font-size: 15px; }
+.ac-tile-value {
+  font-size: 1.35rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.ac-tile-value.is-sm { font-size: .95rem; font-weight: 500; }
+.ac-tile-note {
+  font-size: .74rem;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
+
+/* ── provider cards ────────────────────────────────────── */
+
+.ac-provider { display: flex; flex-direction: column; min-width: 0; }
+.ac-provider .panel-card-body { flex: 1; }
+
+.ac-provider-head {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  min-width: 0;
+}
+.ac-provider-name {
+  font-size: .9rem;
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.ac-provider-detail {
+  font-size: .8rem;
+  color: var(--text-2);
+  line-height: 1.6;
+  margin-top: .45rem;
+  overflow-wrap: anywhere;
+}
+.ac-provider-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .3rem;
+  margin-top: .6rem;
+}
+.ac-prereq {
+  margin: .6rem 0 0 1.05rem;
+  padding: 0;
+}
+.ac-prereq li {
+  font-size: .78rem;
+  color: var(--text-3);
+  line-height: 1.55;
+  margin-bottom: .2rem;
+  overflow-wrap: anywhere;
+}
+
+.ac-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+  align-items: center;
+}
+
+/* ── forms ─────────────────────────────────────────────── */
+
+.ac-form { display: flex; flex-direction: column; gap: .7rem; }
+
+.ac-field { display: flex; flex-direction: column; gap: .25rem; min-width: 0; }
+.ac-field > label {
+  font-size: .78rem;
+  font-weight: 500;
+  color: var(--text-2);
+}
+.ac-field-hint {
+  font-size: .72rem;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+.ac-field-error {
+  font-size: .74rem;
+  color: var(--danger);
+  min-height: 0;
+}
+.ac-field-error:empty { display: none; }
+
+.ac-input,
+.ac-textarea,
+.ac-select {
+  width: 100%;
+  min-width: 0;
+  padding: .45rem .6rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border-mid);
+  border-radius: var(--radius);
+  color: var(--text);
+  font: inherit;
+  font-size: .85rem;
+}
+.ac-textarea {
+  min-height: 108px;
+  resize: vertical;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: .78rem;
+  line-height: 1.55;
+}
+.ac-input:focus, .ac-textarea:focus, .ac-select:focus { border-color: var(--accent-line); }
+.ac-input[aria-invalid="true"], .ac-textarea[aria-invalid="true"] { border-color: var(--danger); }
+.ac-input::placeholder, .ac-textarea::placeholder { color: var(--text-3); }
+.ac-input:disabled, .ac-textarea:disabled, .ac-select:disabled { opacity: .55; cursor: not-allowed; }
+
+/* Checkbox / radio rows that stay legible at 320px. */
+.ac-check {
+  display: flex;
+  align-items: flex-start;
+  gap: .5rem;
+  min-width: 0;
+  font-size: .82rem;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.ac-check input { margin-top: .25rem; flex: none; accent-color: var(--accent); }
+.ac-check span { overflow-wrap: anywhere; }
+.ac-check-note { display: block; font-size: .74rem; color: var(--text-3); }
+
+.ac-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.ac-fieldset > legend {
+  padding: 0;
+  font-size: .78rem;
+  font-weight: 500;
+  color: var(--text-2);
+  margin-bottom: .4rem;
+}
+
+/* Selectable pills (days, stages, platforms). The real control is a
+   visually-hidden checkbox, so keyboard and screen-reader behaviour is
+   the native one. */
+.ac-pills { display: flex; flex-wrap: wrap; gap: .35rem; }
+
+.ac-pill { position: relative; display: inline-flex; }
+.ac-pill input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}
+.ac-pill span {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  min-height: 34px;
+  padding: .25rem .65rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border-mid);
+  border-radius: var(--radius);
+  color: var(--text-2);
+  font-size: .8rem;
+  transition: background var(--dur-1) var(--ease-out),
+              border-color var(--dur-1) var(--ease-out);
+}
+.ac-pill span .ms { font-size: 16px; }
+.ac-pill input:hover + span { background: var(--surface-hover); color: var(--text); }
+.ac-pill input:checked + span {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+.ac-pill input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ac-pill input:disabled + span { opacity: .45; cursor: not-allowed; }
+.ac-pill input:disabled { cursor: not-allowed; }
+
+/* Ordered stage pills carry their position in the pipeline. */
+.ac-pill-order {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: .68rem;
+  color: var(--text-3);
+}
+.ac-pill input:checked + span .ac-pill-order { color: var(--accent); }
+
+.ac-run-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: .9rem;
+  margin-bottom: .9rem;
+}
+
+/* ── the production / dry-run warning ──────────────────── */
+
+.ac-cost {
+  display: flex;
+  align-items: flex-start;
+  gap: .7rem;
+  padding: .8rem .95rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
+  background: var(--surface-1);
+  margin-bottom: .9rem;
+}
+.ac-cost .ms { font-size: 20px; margin-top: 1px; flex: none; }
+.ac-cost-body { min-width: 0; }
+.ac-cost-title { font-size: .84rem; font-weight: 600; color: var(--text); margin-bottom: .2rem; }
+.ac-cost-text { font-size: .8rem; color: var(--text-2); line-height: 1.6; overflow-wrap: anywhere; }
+.ac-cost.is-dry   { border-left-color: var(--info); }
+.ac-cost.is-dry .ms { color: var(--info); }
+.ac-cost.is-live  { border-left-color: var(--warn); background: rgba(215,160,71,.05); }
+.ac-cost.is-live .ms { color: var(--warn); }
+
+/* ── live progress ─────────────────────────────────────── */
+
+.ac-progress-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem .75rem;
+  margin-bottom: .6rem;
+}
+.ac-progress-pct {
+  margin-left: auto;
+  font-size: .82rem;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.ac-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.ac-bar-fill {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width var(--dur-3) var(--ease-out);
+}
+.ac-bar-fill.is-succeeded { background: var(--ok); }
+.ac-bar-fill.is-failed    { background: var(--danger); }
+.ac-bar-fill.is-blocked   { background: var(--warn); }
+.ac-bar-fill.is-cancelled { background: var(--text-3); }
+
+/* Stage track: one step per requested stage, in pipeline order. */
+.ac-track {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+  margin: .8rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.ac-track li {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  padding: .2rem .55rem;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  font-size: .74rem;
+  color: var(--text-3);
+  background: var(--surface-2);
+}
+.ac-track li .ms { font-size: 15px; }
+.ac-track li.is-active {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+.ac-track li.is-done { border-color: rgba(87,185,138,.35); color: var(--ok); }
+
+/* ── log stream ────────────────────────────────────────── */
+
+.ac-log {
+  max-height: 320px;
+  min-height: 96px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: .5rem .6rem;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: .74rem;
+  line-height: 1.65;
+}
+.ac-log-line {
+  display: flex;
+  gap: .55rem;
+  padding: .08rem 0;
+  min-width: 0;
+}
+.ac-log-time { color: var(--text-3); flex: none; font-variant-numeric: tabular-nums; }
+.ac-log-text { color: var(--text-2); overflow-wrap: anywhere; word-break: break-word; min-width: 0; }
+.ac-log-line.is-warn  .ac-log-text { color: var(--warn); }
+.ac-log-line.is-error .ac-log-text { color: var(--danger); }
+.ac-log-empty { color: var(--text-3); font-size: .76rem; }
+
+/* ── job history ───────────────────────────────────────── */
+
+.ac-jobs { display: flex; flex-direction: column; }
+
+.ac-job {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .4rem .75rem;
+  padding: .6rem .9rem;
+  border-bottom: 1px solid var(--border);
+  min-width: 0;
+}
+.ac-job:last-child { border-bottom: 0; }
+.ac-job-main { flex: 1 1 220px; min-width: 0; }
+.ac-job-title {
+  font-size: .84rem;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.ac-job-meta {
+  font-size: .74rem;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
+.ac-job-id {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: .7rem;
+  color: var(--text-3);
+}
+
+/* ── schedule ──────────────────────────────────────────── */
+
+.ac-schedule-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: .9rem;
+  margin-bottom: .9rem;
+}
+
+/* ── loading skeletons ─────────────────────────────────── */
+
+.ac-skeleton { display: grid; gap: .6rem; }
+.ac-sk-card {
+  height: 118px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+}
+
+/* ── responsive ────────────────────────────────────────── */
+
+@media (max-width: 720px) {
+  .ac-tiles { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .ac-tile-value { font-size: 1.15rem; }
+  .ac-run-grid, .ac-schedule-grid { grid-template-columns: 1fr; }
+  .ac-actions .btn { flex: 1 1 auto; }
+  .ac-log { max-height: 240px; font-size: .72rem; }
+  .ac-log-time { display: none; }
+}
+
+@media (max-width: 400px) {
+  .ac-tiles { grid-template-columns: 1fr 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ac-bar-fill, .ac-pill span { transition: none; }
+}

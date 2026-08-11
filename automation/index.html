@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <meta name="robots" content="noindex">
-<meta name="description" content="งานวิจัยและระบบอัตโนมัติของสายการผลิตคอนเทนต์ดวงรายวัน Star — บันทึกการสำรวจ 10 สิงหาคม 2026">
-<title>ระบบอัตโนมัติ · Star Content Ops</title>
+<meta name="description" content="ศูนย์ควบคุมระบบอัตโนมัติของสายการผลิตคอนเทนต์ดวงรายวัน Star — ตั้งค่าผู้ให้บริการ สั่งรันไปป์ไลน์ ติดตามงาน และตั้งตารางเวลา">
+<title>ศูนย์ควบคุมระบบอัตโนมัติ · Star Content Ops</title>
 
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23e0b768' d='M12 1.5c.35 4.6 2.4 7.4 6.9 8.3-4.5.9-6.55 3.7-6.9 8.3-.35-4.6-2.4-7.4-6.9-8.3 4.5-.9 6.55-3.7 6.9-8.3Z'/%3E%3C/svg%3E">
 
@@ -16,6 +16,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300..600,0..1,0&display=block">
 <link rel="stylesheet" href="/style.css">
 <link rel="stylesheet" href="/workspace.css">
+<link rel="stylesheet" href="/automation/automation.css">
 </head>
 <body>
 
@@ -41,14 +42,13 @@
   <div class="topbar-spacer"></div>
 
   <div class="meta-chip">
-    <span class="ms" aria-hidden="true">history_edu</span>
-    <span>บันทึกการสำรวจ <time datetime="2026-08-10">10 ส.ค. 2026</time></span>
+    <span class="ms" aria-hidden="true">schedule</span>
+    <span>เวลากรุงเทพฯ (Asia/Bangkok)</span>
   </div>
 
-  <button class="icon-btn" type="button" data-copy="https://star.panupong.net/automation/"
-          data-copy-label="ลิงก์หน้าระบบอัตโนมัติ"
-          aria-label="คัดลอกลิงก์หน้านี้" title="คัดลอกลิงก์หน้านี้">
-    <span class="ms" aria-hidden="true">link</span>
+  <button class="icon-btn" id="ac-refresh" type="button"
+          aria-label="โหลดข้อมูลใหม่" title="โหลดข้อมูลใหม่">
+    <span class="ms" aria-hidden="true">refresh</span>
   </button>
 </header>
 
@@ -76,12 +76,12 @@
     <div class="sub-nav" id="subNav"></div>
 
     <div class="sidebar-foot">
-      <div class="legend-title">สถานะความสามารถ</div>
+      <div class="legend-title">สถานะผู้ให้บริการ</div>
       <ul class="legend">
-        <li><i class="legend-dot is-done" aria-hidden="true"></i>ใช้งานจริง</li>
-        <li><i class="legend-dot is-partial" aria-hidden="true"></i>ใช้ได้บางส่วน</li>
-        <li><i class="legend-dot is-test" aria-hidden="true"></i>อยู่ระหว่างทดสอบ</li>
-        <li><i class="legend-dot is-none" aria-hidden="true"></i>ยังไม่มี</li>
+        <li><i class="legend-dot is-done" aria-hidden="true"></i>พร้อมใช้งาน</li>
+        <li><i class="legend-dot is-test" aria-hidden="true"></i>ตั้งค่าแล้ว รอยืนยัน</li>
+        <li><i class="legend-dot is-partial" aria-hidden="true"></i>ต้องทำเอง</li>
+        <li><i class="legend-dot is-none" aria-hidden="true"></i>ยังไม่ได้ตั้งค่า</li>
       </ul>
     </div>
   </aside>
@@ -92,461 +92,369 @@
 
     <div class="workspace-head" id="workspace">
       <div class="workspace-title">
-        <span class="eyebrow">Research</span>
-        <h1>งานวิจัยและระบบอัตโนมัติ</h1>
+        <span class="eyebrow">Control Center</span>
+        <h1>ศูนย์ควบคุมระบบอัตโนมัติ</h1>
         <p class="workspace-desc">
-          บันทึกการสำรวจแนวโน้มระบบอัตโนมัติในธุรกิจ Affiliate Content Creator
-          สำหรับสายการผลิตดวงรายวันของ Star
-        </p>
-      </div>
-      <div class="workspace-cta">
-        <button class="btn" type="button" data-copy="https://star.panupong.net/automation/"
-                data-copy-label="ลิงก์หน้าระบบอัตโนมัติ">
-          <span class="ms" aria-hidden="true">content_copy</span>
-          <span class="btn-label">คัดลอกลิงก์หน้านี้</span>
-        </button>
-      </div>
-    </div>
-
-    <div class="callout callout-warn">
-      <span class="ms" aria-hidden="true">history</span>
-      <div class="callout-body">
-        <p class="callout-title">ข้อมูลย้อนหลัง ไม่ใช่สถานะสด</p>
-        <p>
-          ทุกตัวเลขและทุกสถานะในหน้านี้เป็นผลการสำรวจ ณ
-          <strong><time datetime="2026-08-10">10 สิงหาคม 2026</time></strong>
-          หน้านี้ไม่ได้เชื่อมต่อกับระบบใด ๆ และไม่มีการตรวจสอบซ้ำอัตโนมัติ
-          จึงอาจไม่ตรงกับสิ่งที่ระบบเป็นอยู่ในวันนี้ ให้ยืนยันสถานะจริงที่
-          <a href="/content/">คลังคอนเทนต์</a> ก่อนนำไปตัดสินใจ
+          ตั้งค่าการเชื่อมต่อผู้ให้บริการ สั่งรันสายการผลิตดวงรายวัน ติดตามความคืบหน้าแบบเรียลไทม์
+          และกำหนดตารางเวลาอัตโนมัติ ทุกตัวเลขในหน้านี้อ่านจาก API โดยตรง
         </p>
       </div>
     </div>
 
-    <!-- ══ 01 · Executive summary ══ -->
-    <section class="doc-section" id="summary" aria-labelledby="summary-h">
+    <!-- ══ 01 · Overview ══════════════════════════════════ -->
+    <section class="doc-section" id="overview" aria-labelledby="overview-h">
       <div class="section-head">
-        <h2 id="summary-h" data-nav-label="สรุปสำหรับผู้บริหาร">
+        <h2 id="overview-h" data-nav-label="ภาพรวมระบบ">
           <span class="section-index" aria-hidden="true">01</span>
-          <span>สรุปสำหรับผู้บริหาร</span>
+          <span>ภาพรวมระบบ</span>
         </h2>
-        <span class="section-aside">snapshot 2026-08-10</span>
+        <span class="section-aside">GET /api/automation/overview</span>
       </div>
 
-      <div class="stat-row">
-        <div class="stat">
-          <span class="stat-label">โหมดการทำงาน</span>
-          <span class="stat-value">Single-date</span>
-          <span class="stat-meta">ประมวลผลครั้งละ 1 วัน</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">สคริปต์ในสายการผลิต</span>
-          <span class="stat-value">3</span>
-          <span class="stat-meta">คำนวณ → ให้คะแนน → เขียนบท</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">ช่องทางเผยแพร่อัตโนมัติ</span>
-          <span class="stat-value">3 / 5</span>
-          <span class="stat-meta">YouTube, Facebook, LINE OA</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">ช่องว่างที่ต้องปิด</span>
-          <span class="stat-value">3</span>
-          <span class="stat-meta">post-processing, fallback, bulk render</span>
+      <!-- Loading skeleton, replaced on first paint -->
+      <div class="ac-tiles" id="ac-overview" aria-busy="true">
+        <div class="ac-tile sk ac-sk-card"></div>
+        <div class="ac-tile sk ac-sk-card"></div>
+        <div class="ac-tile sk ac-sk-card"></div>
+        <div class="ac-tile sk ac-sk-card"></div>
+      </div>
+
+      <div class="state-block" id="ac-overview-error" hidden></div>
+      <div id="ac-overview-warnings"></div>
+    </section>
+
+    <!-- ══ 02 · Providers ═════════════════════════════════ -->
+    <section class="doc-section" id="providers" aria-labelledby="providers-h">
+      <div class="section-head">
+        <h2 id="providers-h" data-nav-label="การเชื่อมต่อผู้ให้บริการ">
+          <span class="section-index" aria-hidden="true">02</span>
+          <span>การเชื่อมต่อผู้ให้บริการ</span>
+        </h2>
+        <span class="section-aside">GET /api/providers</span>
+      </div>
+
+      <div class="callout callout-info">
+        <span class="ms" aria-hidden="true">lock</span>
+        <div class="callout-body">
+          <div class="callout-title">ค่าลับถูกเก็บไว้ที่เซิร์ฟเวอร์เท่านั้น</div>
+          <p>
+            ฟอร์มในหน้านี้จะไม่เติมค่าเดิมให้อัตโนมัติ และ API จะไม่ส่งค่าลับกลับมาไม่ว่ากรณีใด
+            สิ่งที่แสดงได้มีเพียงสถานะและตัวอักษรท้ายไม่กี่ตัวเพื่อยืนยันว่าบันทึกไว้แล้ว
+            ไฟล์ทั้งหมดถูกเขียนด้วยสิทธิ์ 0600 ในไดเรกทอรีสถานะ
+          </p>
+          <p>
+            Claude ใช้การล็อกอินของ CLI บนเซิร์ฟเวอร์ (<code class="inline">claude login</code>)
+            ระบบนี้ไม่รับ session token ของ Claude ผ่านเบราว์เซอร์
+          </p>
         </div>
       </div>
 
-      <div class="prose" style="margin-top:1rem">
-        <p>
-          สายการผลิตเดินได้ครบตั้งแต่การคำนวณดวงจนถึงบทภาษาไทย และเผยแพร่อัตโนมัติได้แล้ว 3 ช่องทาง
-          จุดอ่อนที่พบ ณ วันสำรวจอยู่ที่ <strong>คุณภาพผลลัพธ์</strong> (ไม่มีการกรอง emoji และภาษาอังกฤษที่หลุดออกมาจากโมเดล
-          และไม่มี template สำรองเมื่อโมเดลล้มเหลว) และ <strong>ปริมาณ</strong> (ยังผลิตครั้งละวัน ไม่มี batch)
-        </p>
-      </div>
-
-      <div class="sub-head">
-        <h3 id="publish-state" data-nav-label="สถานะช่องทางเผยแพร่">สถานะช่องทางเผยแพร่</h3>
-        <span class="sub-note">ตามที่บันทึกไว้เมื่อ 10 ส.ค. 2026</span>
-      </div>
-
-      <div class="chip-row">
-        <span class="chip chip-ok"><span class="ms" aria-hidden="true">check_circle</span>YouTube — อัตโนมัติ</span>
-        <span class="chip chip-ok"><span class="ms" aria-hidden="true">check_circle</span>Facebook — อัตโนมัติ</span>
-        <span class="chip chip-ok"><span class="ms" aria-hidden="true">check_circle</span>LINE OA — อัตโนมัติ</span>
-        <span class="chip chip-danger"><span class="ms" aria-hidden="true">cancel</span>TikTok — อัปโหลดเอง</span>
-        <span class="chip chip-warn"><span class="ms" aria-hidden="true">warning</span>Shopee — บางส่วน</span>
+      <div class="card-grid" id="ac-providers"></div>
+      <div class="state-block" id="ac-providers-empty" hidden>
+        <span class="ms state-icon" aria-hidden="true">hourglass_empty</span>
+        <p class="state-title">กำลังโหลดข้อมูลผู้ให้บริการ</p>
       </div>
     </section>
 
-    <!-- ══ 02 · Current pipeline ══ -->
-    <section class="doc-section" id="pipeline" aria-labelledby="pipeline-h">
+    <!-- ══ 03 · Run pipeline ══════════════════════════════ -->
+    <section class="doc-section" id="run" aria-labelledby="run-h">
       <div class="section-head">
-        <h2 id="pipeline-h" data-nav-label="สายการผลิตปัจจุบัน">
-          <span class="section-index" aria-hidden="true">02</span>
-          <span>สายการผลิตปัจจุบัน</span>
+        <h2 id="run-h" data-nav-label="สั่งรันไปป์ไลน์">
+          <span class="section-index" aria-hidden="true">03</span>
+          <span>สั่งรันไปป์ไลน์</span>
         </h2>
-        <span class="section-aside">compute → score → write</span>
-      </div>
-      <p class="section-desc">
-        ทำงานแบบ single-date คือหนึ่งรอบต่อหนึ่งวันที่ ผ่านสคริปต์สามตัวต่อกันเป็นทอด
-      </p>
-
-      <div class="flow">
-        <div class="flow-step">
-          <span class="step-idx" aria-hidden="true">1</span>
-          <div class="flow-body">
-            <div class="flow-title"><span>คำนวณดวง</span> <code>astro_daily_pro.py</code></div>
-            <p class="flow-desc">คำนวณตำแหน่งดาวจาก Swiss Ephemeris — ดาว 10 ดวง ราศี และ aspects</p>
-          </div>
-          <button class="icon-btn flow-link" type="button" data-copy="astro_daily_pro.py"
-                  data-copy-label="ชื่อสคริปต์" aria-label="คัดลอกชื่อสคริปต์ astro_daily_pro.py">
-            <span class="ms" aria-hidden="true">content_copy</span>
-          </button>
-        </div>
-        <div class="flow-step">
-          <span class="step-idx" aria-hidden="true">2</span>
-          <div class="flow-body">
-            <div class="flow-title"><span>แปลงเป็นคะแนน</span> <code>daily_horoscope_v2.py</code></div>
-            <p class="flow-desc">แปลงข้อมูลดาวเป็นคะแนน 4 ด้าน สำหรับผู้ที่เกิดทั้ง 7 วัน</p>
-          </div>
-          <button class="icon-btn flow-link" type="button" data-copy="daily_horoscope_v2.py"
-                  data-copy-label="ชื่อสคริปต์" aria-label="คัดลอกชื่อสคริปต์ daily_horoscope_v2.py">
-            <span class="ms" aria-hidden="true">content_copy</span>
-          </button>
-        </div>
-        <div class="flow-step">
-          <span class="step-idx" aria-hidden="true">3</span>
-          <div class="flow-body">
-            <div class="flow-title"><span>เขียนบท</span> <code>horoscope_ai_writer_v2.py</code></div>
-            <p class="flow-desc">DeepSeek เขียนบทภาษาไทยจากคะแนนและข้อมูลดวงของวันนั้น</p>
-          </div>
-          <button class="icon-btn flow-link" type="button" data-copy="horoscope_ai_writer_v2.py"
-                  data-copy-label="ชื่อสคริปต์" aria-label="คัดลอกชื่อสคริปต์ horoscope_ai_writer_v2.py">
-            <span class="ms" aria-hidden="true">content_copy</span>
-          </button>
-        </div>
+        <span class="section-aside">POST /api/jobs</span>
       </div>
 
-      <div class="callout callout-info" style="margin-top:1rem">
+      <div class="panel-card">
+        <div class="panel-card-head">
+          <h3>ขอบเขตงาน</h3>
+          <span class="ac-field-hint" id="ac-range-note"></span>
+        </div>
+        <div class="panel-card-body">
+
+          <div class="ac-run-grid">
+            <div class="ac-field">
+              <label for="ac-from-date">วันที่เริ่มต้น</label>
+              <input class="ac-input" type="date" id="ac-from-date" name="from_date"
+                     required aria-describedby="ac-date-hint">
+            </div>
+            <div class="ac-field">
+              <label for="ac-to-date">วันที่สิ้นสุด</label>
+              <input class="ac-input" type="date" id="ac-to-date" name="to_date"
+                     aria-describedby="ac-date-hint">
+              <span class="ac-field-hint" id="ac-date-hint">
+                เว้นว่างได้ ระบบจะใช้วันเดียวกับวันที่เริ่มต้น
+              </span>
+            </div>
+          </div>
+
+          <fieldset class="ac-fieldset" style="margin-bottom:.9rem">
+            <legend id="ac-days-legend">วันเกิดที่ต้องการผลิต</legend>
+            <div class="ac-pills" id="ac-days" role="group" aria-labelledby="ac-days-legend"></div>
+            <div class="ac-actions" style="margin-top:.5rem">
+              <button class="btn btn-sm btn-quiet" type="button" id="ac-select-all-days">
+                <span class="ms" aria-hidden="true">select_all</span>
+                <span>เลือกทั้งหมด</span>
+              </button>
+              <button class="btn btn-sm btn-quiet" type="button" id="ac-clear-days">
+                <span class="ms" aria-hidden="true">deselect</span>
+                <span>ล้างการเลือก</span>
+              </button>
+            </div>
+          </fieldset>
+
+          <fieldset class="ac-fieldset" style="margin-bottom:.9rem">
+            <legend id="ac-stages-legend">ขั้นตอนที่จะรัน (เรียงตามลำดับไปป์ไลน์เสมอ)</legend>
+            <div class="ac-pills" id="ac-stages" role="group" aria-labelledby="ac-stages-legend"></div>
+          </fieldset>
+
+          <fieldset class="ac-fieldset" style="margin-bottom:.9rem">
+            <legend id="ac-platforms-legend">ปลายทางการเผยแพร่ (จำเป็นเมื่อเลือกขั้นตอน "เผยแพร่")</legend>
+            <div class="ac-pills" id="ac-platforms" role="group" aria-labelledby="ac-platforms-legend"></div>
+            <p class="ac-field-hint" id="ac-manual-note"></p>
+          </fieldset>
+
+          <div class="ac-field" style="margin-bottom:.5rem">
+            <label class="ac-check" for="ac-dry-run">
+              <input type="checkbox" id="ac-dry-run" checked>
+              <span>
+                โหมดซ้อม (dry run)
+                <span class="ac-check-note">
+                  ตรวจเงื่อนไขและแสดงคำสั่งที่จะรัน โดยไม่เรียกผู้ให้บริการและไม่เขียนไฟล์ลงโปรเจกต์
+                </span>
+              </span>
+            </label>
+          </div>
+
+          <div class="ac-field">
+            <label class="ac-check" for="ac-force">
+              <input type="checkbox" id="ac-force">
+              <span>
+                เขียนทับไฟล์เดิม (force)
+                <span class="ac-check-note">
+                  ปกติระบบจะข้ามบทที่มีอยู่แล้ว เปิดตัวเลือกนี้เพื่อสร้างใหม่ทับของเดิม
+                </span>
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <div class="panel-card-body" style="border-top:1px solid var(--border)">
+          <div class="ac-cost is-dry" id="ac-cost" role="status" aria-live="polite"></div>
+          <div class="ac-actions">
+            <button class="btn btn-primary" type="button" id="ac-run">
+              <span class="ms" aria-hidden="true">science</span>
+              <span>เริ่มงานแบบซ้อม</span>
+            </button>
+          </div>
+          <p class="status-msg" id="ac-run-status" aria-live="polite"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ 04 · Live progress ═════════════════════════════ -->
+    <section class="doc-section" id="progress" aria-labelledby="progress-h">
+      <div class="section-head">
+        <h2 id="progress-h" data-nav-label="ความคืบหน้าและบันทึก">
+          <span class="section-index" aria-hidden="true">04</span>
+          <span>ความคืบหน้าและบันทึก</span>
+        </h2>
+        <span class="section-aside">GET /api/jobs/{id}</span>
+      </div>
+
+      <div id="ac-progress-section">
+        <div class="state-block" id="ac-progress-empty">
+          <span class="ms state-icon" aria-hidden="true">motion_photos_off</span>
+          <p class="state-title">ยังไม่มีงานที่กำลังติดตาม</p>
+          <p class="state-desc">เริ่มงานใหม่จากส่วนด้านบน หรือเลือกงานจากประวัติเพื่อดูรายละเอียด</p>
+        </div>
+
+        <div class="panel-card" id="ac-progress-panel" hidden>
+          <div class="panel-card-head">
+            <h3>งานที่กำลังติดตาม</h3>
+            <span class="chip" id="ac-job-status"></span>
+          </div>
+          <div class="panel-card-body">
+            <p class="ac-job-meta"><span class="ac-job-id" id="ac-job-id"></span></p>
+            <p class="ac-job-meta" id="ac-job-scope"></p>
+
+            <div class="ac-progress-head" style="margin-top:.8rem">
+              <span class="ac-field-hint">ความคืบหน้า</span>
+              <span class="ac-progress-pct" id="ac-progress-pct">0%</span>
+            </div>
+            <div class="ac-bar" id="ac-bar" role="progressbar"
+                 aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"
+                 aria-label="ความคืบหน้าของงาน">
+              <div class="ac-bar-fill" id="ac-bar-fill"></div>
+            </div>
+
+            <ul class="ac-track" id="ac-track"></ul>
+
+            <p class="status-msg" id="ac-progress-status" aria-live="polite"></p>
+
+            <div class="ac-actions" style="margin-top:.8rem">
+              <button class="btn btn-sm" type="button" id="ac-cancel" hidden>
+                <span class="ms" aria-hidden="true">stop_circle</span>
+                <span>ยกเลิกงาน</span>
+              </button>
+              <button class="btn btn-sm" type="button" id="ac-retry" hidden>
+                <span class="ms" aria-hidden="true">replay</span>
+                <span>สั่งทำใหม่</span>
+              </button>
+              <label class="ac-check" for="ac-log-follow" style="margin-left:auto">
+                <input type="checkbox" id="ac-log-follow" checked>
+                <span>เลื่อนตามบันทึกล่าสุด</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="panel-card-head">
+            <h3>บันทึกการทำงาน</h3>
+          </div>
+          <div class="panel-card-body">
+            <div class="ac-log" id="ac-log" role="log" aria-live="polite"
+                 aria-label="บันทึกการทำงานของงานปัจจุบัน" tabindex="0">
+              <p class="ac-log-empty">ยังไม่มีบันทึก</p>
+            </div>
+          </div>
+
+          <div class="panel-card-body" id="ac-result" hidden></div>
+
+          <div class="panel-card-foot">
+            การสั่งทำใหม่เป็นการกระทำด้วยตนเองเสมอ ระบบไม่ลองใหม่ให้อัตโนมัติ
+            เพื่อไม่ให้เกิดลูปเรียกใช้งานที่มีค่าใช้จ่าย
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ 05 · Job history ═══════════════════════════════ -->
+    <section class="doc-section" id="history" aria-labelledby="history-h">
+      <div class="section-head">
+        <h2 id="history-h" data-nav-label="ประวัติงาน">
+          <span class="section-index" aria-hidden="true">05</span>
+          <span>ประวัติงาน</span>
+        </h2>
+        <span class="section-aside">GET /api/jobs</span>
+      </div>
+
+      <div class="panel-card">
+        <div class="ac-jobs" id="ac-jobs"></div>
+        <div class="state-block" id="ac-jobs-empty" hidden>
+          <span class="ms state-icon" aria-hidden="true">inbox</span>
+          <p class="state-title">ยังไม่มีงานในระบบ</p>
+          <p class="state-desc">งานที่สั่งจากหน้านี้และจากตารางเวลาจะปรากฏที่นี่</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ 06 · Schedule ══════════════════════════════════ -->
+    <section class="doc-section" id="schedule" aria-labelledby="schedule-h">
+      <div class="section-head">
+        <h2 id="schedule-h" data-nav-label="ตารางเวลาอัตโนมัติ">
+          <span class="section-index" aria-hidden="true">06</span>
+          <span>ตารางเวลาอัตโนมัติ</span>
+        </h2>
+        <span class="section-aside">GET · PUT /api/schedule</span>
+      </div>
+
+      <div class="callout callout-warn">
         <span class="ms" aria-hidden="true">info</span>
         <div class="callout-body">
-          <p class="callout-title">ข้อจำกัดที่บันทึกไว้</p>
+          <div class="callout-title">ค่าเริ่มต้นคือปิดใช้งาน</div>
           <p>
-            หนึ่งรอบให้ผลหนึ่งวันที่ การผลิตล่วงหน้าทั้งเดือนจึงต้องสั่งรันซ้ำทีละวัน
-            และไม่มีขั้นตอนตรวจคุณภาพคั่นระหว่างการเขียนบทกับการนำไปใช้
+            ตารางเวลาทำงานวันละหนึ่งครั้งตามเวลากรุงเทพฯ
+            (<span id="ac-sched-tz">Asia/Bangkok</span>) และไม่มีการลองใหม่อัตโนมัติ
+            ถ้ามีงานอื่นทำงานอยู่ในเวลานั้น ระบบจะข้ามรอบนั้นไปแทนที่จะต่อคิว
           </p>
         </div>
       </div>
-    </section>
 
-    <!-- ══ 03 · Capability matrix ══ -->
-    <section class="doc-section" id="capability" aria-labelledby="capability-h">
-      <div class="section-head">
-        <h2 id="capability-h" data-nav-label="ตารางความสามารถ">
-          <span class="section-index" aria-hidden="true">03</span>
-          <span>ตารางความสามารถ</span>
-        </h2>
-        <span class="section-aside">16 องค์ประกอบ</span>
-      </div>
-      <p class="section-desc">
-        องค์ประกอบทั้งหมดที่สำรวจในสามด้าน ได้แก่ การเขียนบทด้วย AI เสียงพากย์ และการตัดต่อวิดีโอ
-        สถานะทุกช่องเป็นค่าที่บันทึกไว้เมื่อ 10 ส.ค. 2026
-      </p>
+      <div class="panel-card">
+        <div class="panel-card-head">
+          <h3>ตั้งค่าตารางเวลา</h3>
+          <span class="ac-field-hint" id="ac-sched-last"></span>
+        </div>
+        <div class="panel-card-body">
 
-      <div class="panel-card is-flush">
-        <div class="filter-bar">
-          <div class="search-field">
-            <span class="ms" aria-hidden="true">search</span>
-            <input type="search" id="cap-search"
-                   placeholder="ค้นหาองค์ประกอบ ด้าน หรือสถานะ"
-                   aria-label="ค้นหาในตารางความสามารถ"
-                   data-filter-input
-                   data-filter-target="#cap-table"
-                   data-filter-count="#cap-count"
-                   data-filter-empty="#cap-empty">
-            <button class="icon-btn btn-sm search-clear" type="button" aria-label="ล้างคำค้นหา">
-              <span class="ms" aria-hidden="true">close</span>
+          <div class="ac-field" style="margin-bottom:.9rem">
+            <label class="ac-check" for="ac-sched-enabled">
+              <input type="checkbox" id="ac-sched-enabled">
+              <span>เปิดใช้งานตารางเวลา</span>
+            </label>
+          </div>
+
+          <div class="ac-schedule-grid">
+            <div class="ac-field">
+              <label for="ac-sched-time">เวลาที่เริ่มรัน</label>
+              <input class="ac-input" type="time" id="ac-sched-time" value="05:30">
+              <span class="ac-field-hint">รูปแบบ 24 ชั่วโมง ตามเวลากรุงเทพฯ</span>
+            </div>
+            <div class="ac-field">
+              <label for="ac-sched-offset">วันที่เป้าหมาย</label>
+              <select class="ac-select" id="ac-sched-offset">
+                <option value="0">วันเดียวกับวันที่รัน</option>
+                <option value="1">วันถัดไป (+1)</option>
+                <option value="2">อีก 2 วัน (+2)</option>
+                <option value="3">อีก 3 วัน (+3)</option>
+                <option value="7">อีก 7 วัน (+7)</option>
+              </select>
+              <span class="ac-field-hint">ผลิตล่วงหน้าได้โดยเลื่อนวันที่เป้าหมาย</span>
+            </div>
+          </div>
+
+          <fieldset class="ac-fieldset" style="margin-bottom:.9rem">
+            <legend id="ac-sched-days-legend">วันเกิดที่ผลิตในแต่ละรอบ</legend>
+            <div class="ac-pills" id="ac-sched-days" role="group"
+                 aria-labelledby="ac-sched-days-legend"></div>
+          </fieldset>
+
+          <fieldset class="ac-fieldset" style="margin-bottom:.9rem">
+            <legend id="ac-sched-stages-legend">ขั้นตอนที่รันในแต่ละรอบ</legend>
+            <div class="ac-pills" id="ac-sched-stages" role="group"
+                 aria-labelledby="ac-sched-stages-legend"></div>
+          </fieldset>
+
+          <fieldset class="ac-fieldset" style="margin-bottom:.9rem">
+            <legend id="ac-sched-platforms-legend">
+              ปลายทางการเผยแพร่ของรอบอัตโนมัติ (จำเป็นเมื่อเลือกขั้นตอน "เผยแพร่")
+            </legend>
+            <div class="ac-pills" id="ac-sched-platforms" role="group"
+                 aria-labelledby="ac-sched-platforms-legend"></div>
+            <p class="ac-field-hint" id="ac-sched-manual-note"></p>
+            <p class="status-msg" id="ac-sched-warning" aria-live="polite"></p>
+          </fieldset>
+
+          <div class="ac-field">
+            <label class="ac-check" for="ac-sched-dry">
+              <input type="checkbox" id="ac-sched-dry" checked>
+              <span>
+                รันแบบซ้อมเท่านั้น
+                <span class="ac-check-note">
+                  แนะนำให้เปิดไว้จนกว่าจะยืนยันว่าทุกขั้นตอนผ่านในโหมดซ้อมแล้ว
+                </span>
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <div class="panel-card-body" style="border-top:1px solid var(--border)">
+          <div class="ac-actions">
+            <button class="btn btn-primary btn-sm" type="button" id="ac-sched-save">
+              <span class="ms" aria-hidden="true">save</span>
+              <span>บันทึกตารางเวลา</span>
             </button>
           </div>
-          <span class="filter-count" id="cap-count" role="status" aria-live="polite">16 รายการ</span>
-        </div>
-
-        <div class="table-wrap">
-          <table class="data" id="cap-table">
-            <caption>ความสามารถของระบบ แยกตามด้าน — ข้อมูลย้อนหลัง 10 ส.ค. 2026</caption>
-            <thead>
-              <tr>
-                <th scope="col">องค์ประกอบ</th>
-                <th scope="col">ด้าน</th>
-                <th scope="col">สถานะ</th>
-                <th scope="col">รายละเอียด</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Swiss Ephemeris</td>
-                <td>การเขียนบท</td>
-                <td class="tight"><span class="badge badge-done"><span class="ms" aria-hidden="true">check_circle</span>ใช้งานจริง</span></td>
-                <td>คำนวณดาว 10 ดวง ราศี และ aspects</td>
-              </tr>
-              <tr>
-                <td>DeepSeek Writer</td>
-                <td>การเขียนบท</td>
-                <td class="tight"><span class="badge badge-generating"><span class="ms" aria-hidden="true">warning</span>ใช้ได้บางส่วน</span></td>
-                <td>เขียนได้ แต่มี emoji หลุดและภาษาอังกฤษปนในบท</td>
-              </tr>
-              <tr>
-                <td>Claude Writer</td>
-                <td>การเขียนบท</td>
-                <td class="tight"><span class="badge badge-info"><span class="ms" aria-hidden="true">science</span>อยู่ระหว่างทดสอบ</span></td>
-                <td>คุณภาพสูงกว่า แต่ต้นทุนต่อบทสูงกว่า</td>
-              </tr>
-              <tr>
-                <td>Fallback template</td>
-                <td>การเขียนบท</td>
-                <td class="tight"><span class="badge badge-failed"><span class="ms" aria-hidden="true">cancel</span>ยังไม่มี</span></td>
-                <td>ไม่มี template สำรองเมื่อโมเดลล้มเหลว</td>
-              </tr>
-              <tr>
-                <td>Post-processing</td>
-                <td>การเขียนบท</td>
-                <td class="tight"><span class="badge badge-failed"><span class="ms" aria-hidden="true">cancel</span>ยังไม่มี</span></td>
-                <td>ไม่มีขั้นกรอง emoji และคำภาษาอังกฤษก่อนนำบทไปใช้</td>
-              </tr>
-              <tr>
-                <td>Google Chirp3 HD</td>
-                <td>เสียงพากย์</td>
-                <td class="tight"><span class="badge badge-info"><span class="ms" aria-hidden="true">science</span>ทดสอบแล้ว</span></td>
-                <td>เสียงภาษาไทยเป็นธรรมชาติ</td>
-              </tr>
-              <tr>
-                <td>Bulk TTS</td>
-                <td>เสียงพากย์</td>
-                <td class="tight"><span class="badge badge-failed"><span class="ms" aria-hidden="true">cancel</span>ยังไม่มี</span></td>
-                <td>ยังไม่มีการสร้างเสียงแบบ batch</td>
-              </tr>
-              <tr>
-                <td>ความหลากหลายของเสียง</td>
-                <td>เสียงพากย์</td>
-                <td class="tight"><span class="badge badge-failed"><span class="ms" aria-hidden="true">cancel</span>เสียงเดียว</span></td>
-                <td>ใช้เสียงเดียวกันทั้ง 7 วันเกิด</td>
-              </tr>
-              <tr>
-                <td>CapCut Automation</td>
-                <td>ตัดต่อวิดีโอ</td>
-                <td class="tight"><span class="badge badge-info"><span class="ms" aria-hidden="true">description</span>มี spec แล้ว</span></td>
-                <td>เขียน spec เสร็จ แต่ยังไม่ได้ลงมือ implement</td>
-              </tr>
-              <tr>
-                <td>FFmpeg</td>
-                <td>ตัดต่อวิดีโอ</td>
-                <td class="tight"><span class="badge badge-done"><span class="ms" aria-hidden="true">check_circle</span>พร้อมใช้</span></td>
-                <td>เรนเดอร์แบบ headless ได้</td>
-              </tr>
-              <tr>
-                <td>Video templates</td>
-                <td>ตัดต่อวิดีโอ</td>
-                <td class="tight"><span class="badge badge-failed"><span class="ms" aria-hidden="true">cancel</span>ยังไม่มี</span></td>
-                <td>ยังไม่มีภาพพื้นหลังสำหรับวิดีโอ</td>
-              </tr>
-              <tr>
-                <td>YouTube</td>
-                <td>เผยแพร่</td>
-                <td class="tight"><span class="badge badge-done"><span class="ms" aria-hidden="true">check_circle</span>อัตโนมัติ</span></td>
-                <td>อัปโหลดอัตโนมัติได้</td>
-              </tr>
-              <tr>
-                <td>Facebook</td>
-                <td>เผยแพร่</td>
-                <td class="tight"><span class="badge badge-done"><span class="ms" aria-hidden="true">check_circle</span>อัตโนมัติ</span></td>
-                <td>โพสต์อัตโนมัติได้</td>
-              </tr>
-              <tr>
-                <td>LINE OA</td>
-                <td>เผยแพร่</td>
-                <td class="tight"><span class="badge badge-done"><span class="ms" aria-hidden="true">check_circle</span>อัตโนมัติ</span></td>
-                <td>ส่งข้อความอัตโนมัติได้</td>
-              </tr>
-              <tr>
-                <td>TikTok</td>
-                <td>เผยแพร่</td>
-                <td class="tight"><span class="badge badge-failed"><span class="ms" aria-hidden="true">cancel</span>ทำเอง</span></td>
-                <td>ต้องอัปโหลดด้วยมือทุกครั้ง</td>
-              </tr>
-              <tr>
-                <td>Shopee</td>
-                <td>เผยแพร่</td>
-                <td class="tight"><span class="badge badge-generating"><span class="ms" aria-hidden="true">warning</span>บางส่วน</span></td>
-                <td>ทำได้บางขั้นตอน ยังไม่ครบวงจร</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="state-block" id="cap-empty" hidden>
-          <span class="ms state-icon" aria-hidden="true">search_off</span>
-          <p class="state-title">ไม่พบองค์ประกอบที่ตรงกับคำค้นหา</p>
-          <p class="state-desc">ลองใช้คำสั้นลง เช่น ชื่อเครื่องมือ ชื่อด้าน หรือคำว่า “ยังไม่มี”</p>
-        </div>
-        <div class="panel-card-foot">
-          ตารางนี้เป็นบันทึกย้อนหลัง ไม่ได้ตรวจสอบสถานะจริงของบริการแบบเรียลไทม์
+          <p class="status-msg" id="ac-sched-status" aria-live="polite"></p>
         </div>
       </div>
     </section>
 
-    <!-- ══ 04 · Outlook ══ -->
-    <section class="doc-section" id="outlook" aria-labelledby="outlook-h">
-      <div class="section-head">
-        <h2 id="outlook-h" data-nav-label="แนวโน้ม 6-12 เดือน">
-          <span class="section-index" aria-hidden="true">04</span>
-          <span>แนวโน้ม 6-12 เดือน</span>
-        </h2>
-        <span class="section-aside">forecast</span>
-      </div>
-      <p class="section-desc">
-        สิ่งที่คาดว่าจะทำได้ภายใน 6-12 เดือนนับจากวันสำรวจ พร้อมระดับผลกระทบที่ประเมินไว้
-        ทั้งหมดยังเป็นการคาดการณ์ ไม่ใช่งานที่ยืนยันแล้ว
-      </p>
-
-      <div class="panel-card is-flush">
-        <div class="filter-bar">
-          <div class="search-field">
-            <span class="ms" aria-hidden="true">search</span>
-            <input type="search" id="outlook-search"
-                   placeholder="ค้นหาสิ่งที่จะพัฒนา"
-                   aria-label="ค้นหาในตารางแนวโน้ม"
-                   data-filter-input
-                   data-filter-target="#outlook-table"
-                   data-filter-count="#outlook-count"
-                   data-filter-empty="#outlook-empty">
-            <button class="icon-btn btn-sm search-clear" type="button" aria-label="ล้างคำค้นหา">
-              <span class="ms" aria-hidden="true">close</span>
-            </button>
-          </div>
-          <span class="filter-count" id="outlook-count" role="status" aria-live="polite">6 รายการ</span>
-        </div>
-
-        <div class="table-wrap">
-          <table class="data" id="outlook-table">
-            <caption>สิ่งที่คาดว่าจะพัฒนาได้ใน 6-12 เดือน — ประเมินเมื่อ 10 ส.ค. 2026</caption>
-            <thead>
-              <tr>
-                <th scope="col">สิ่งที่จะพัฒนา</th>
-                <th scope="col">ผลกระทบ</th>
-                <th scope="col">เหตุผล</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Multi-Agent Pipeline</td>
-                <td class="tight impact">
-                  <span class="meter" role="img" aria-label="ผลกระทบสูง 3 จาก 3">
-                    <i class="on"></i><i class="on"></i><i class="on"></i>
-                  </span><span class="impact-label">สูง</span>
-                </td>
-                <td>DeepSeek ร่างบท แล้วให้ Claude ขัดเกลา ได้คุณภาพโดยคุมต้นทุน</td>
-              </tr>
-              <tr>
-                <td>Quality Agent</td>
-                <td class="tight impact">
-                  <span class="meter" role="img" aria-label="ผลกระทบสูง 3 จาก 3">
-                    <i class="on"></i><i class="on"></i><i class="on"></i>
-                  </span><span class="impact-label">สูง</span>
-                </td>
-                <td>ตรวจ emoji ภาษา และความยาวอัตโนมัติ ปิดช่องว่าง post-processing</td>
-              </tr>
-              <tr>
-                <td>Bulk overnight render</td>
-                <td class="tight impact">
-                  <span class="meter" role="img" aria-label="ผลกระทบสูง 3 จาก 3">
-                    <i class="on"></i><i class="on"></i><i class="on"></i>
-                  </span><span class="impact-label">สูง</span>
-                </td>
-                <td>เรนเดอร์ข้ามคืนได้ราว 1,260 วิดีโอต่อเดือน แทนการทำทีละวัน</td>
-              </tr>
-              <tr>
-                <td>Platform-specific formats</td>
-                <td class="tight impact">
-                  <span class="meter" role="img" aria-label="ผลกระทบสูง 3 จาก 3">
-                    <i class="on"></i><i class="on"></i><i class="on"></i>
-                  </span><span class="impact-label">สูง</span>
-                </td>
-                <td>ตัดสัดส่วนและความยาวให้เหมาะกับ TikTok, YouTube และ Facebook</td>
-              </tr>
-              <tr>
-                <td>Prompt Variation Pool</td>
-                <td class="tight impact">
-                  <span class="meter" role="img" aria-label="ผลกระทบปานกลาง 2 จาก 3">
-                    <i class="on"></i><i class="on"></i><i></i>
-                  </span><span class="impact-label">ปานกลาง</span>
-                </td>
-                <td>คลัง hook 20 แบบขึ้นไป ลดความซ้ำของบทเปิด</td>
-              </tr>
-              <tr>
-                <td>Real-time QC Dashboard</td>
-                <td class="tight impact">
-                  <span class="meter" role="img" aria-label="ผลกระทบต่ำ 1 จาก 3">
-                    <i class="on"></i><i></i><i></i>
-                  </span><span class="impact-label">ต่ำ</span>
-                </td>
-                <td>เห็นคุณภาพงานแบบสด มีประโยชน์เมื่อปริมาณงานโตขึ้นแล้ว</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="state-block" id="outlook-empty" hidden>
-          <span class="ms state-icon" aria-hidden="true">search_off</span>
-          <p class="state-title">ไม่พบรายการที่ตรงกับคำค้นหา</p>
-          <p class="state-desc">ลองใช้คำสั้นลง เช่น “agent”, “render” หรือ “prompt”</p>
-        </div>
-      </div>
-    </section>
-
-    <!-- ══ 05 · Prioritized actions ══ -->
-    <section class="doc-section" id="actions" aria-labelledby="actions-h">
-      <div class="section-head">
-        <h2 id="actions-h" data-nav-label="ลำดับงานที่ควรทำ">
-          <span class="section-index" aria-hidden="true">05</span>
-          <span>ลำดับงานที่ควรทำ</span>
-        </h2>
-        <span class="section-aside">จากวันสำรวจ 10 ส.ค. 2026</span>
-      </div>
-      <p class="section-desc">
-        ลำดับความสำคัญที่เสนอไว้ในวันสำรวจ กรอบเวลาทั้งหมดนับจากวันนั้น ไม่ใช่จากวันนี้
-      </p>
-
-      <ol class="timeline">
-        <li class="is-now">
-          <span class="tl-when">ทันที</span>
-          <div class="tl-what">เพิ่ม post-processing ให้บท</div>
-          <p class="tl-why">ตัด emoji ออก และแปลศัพท์อังกฤษเป็นไทย เช่น Conjunction เป็น โคจรประชิด</p>
-        </li>
-        <li>
-          <span class="tl-when">ภายในสัปดาห์</span>
-          <div class="tl-what">เพิ่ม fallback template</div>
-          <p class="tl-why">ใช้ข้อมูลดวงจริงประกอบ template เพื่อให้ยังมีบทออกแม้โมเดลล้มเหลว</p>
-        </li>
-        <li>
-          <span class="tl-when">ภายในเดือน</span>
-          <div class="tl-what">สร้าง prompt variation pool</div>
-          <p class="tl-why">รวบรวม hook อย่างน้อย 20 แบบ ลดความซ้ำของบทเปิดในแต่ละวัน</p>
-        </li>
-        <li>
-          <span class="tl-when">เดือนถัดไป</span>
-          <div class="tl-what">ทดลองสองขั้น DeepSeek แล้ว Claude</div>
-          <p class="tl-why">ให้ DeepSeek ร่าง แล้วให้ Claude ขัดเกลา วัดคุณภาพเทียบกับต้นทุนที่เพิ่ม</p>
-        </li>
-      </ol>
-
-      <div class="callout callout-accent" style="margin-top:1.25rem">
-        <span class="ms" aria-hidden="true">flag</span>
-        <div class="callout-body">
-          <p class="callout-title">ก่อนเริ่มงานตามรายการนี้</p>
-          <p>
-            ตรวจสอบก่อนว่าข้อใดถูกทำไปแล้วหลังวันที่ 10 สิงหาคม 2026
-            เพราะหน้านี้ไม่ได้อัปเดตสถานะการทำงานตามเวลาจริง
-          </p>
-        </div>
-      </div>
-    </section>
+    <p class="ac-field-hint" style="margin:2rem 0 1rem">
+      ต้องการคำอธิบายแต่ละขั้นตอนและวิธีแก้ปัญหา อ่านได้ที่
+      <a href="/howto/">คู่มือระบบ</a>
+    </p>
 
   </main>
 </div>
@@ -554,6 +462,7 @@
 <div class="toast-region" id="toast-region" role="status" aria-live="polite"></div>
 
 <script src="/workspace.js" defer></script>
+<script src="/automation/automation.js" defer></script>
 
 </body>
 </html>
