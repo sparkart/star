@@ -342,6 +342,64 @@ class TestOverviewAndProviders(AutomationApiTestCase):
         self.assertEqual(self.service.providers.get("google_tts").stored(), {
             "mode": "api_key", "api_key": FAKE_GOOGLE_API_KEY})
 
+    def test_google_tts_voice_options_are_listed_as_safe_metadata(self):
+        _status, listing = self.get("/api/providers")
+        google = next(item for item in listing["providers"]
+                      if item["provider"] == "google_tts")
+        field = next(f for f in google["fields"] if f["name"] == "voice_name")
+        self.assertEqual(field["type"], "select")
+        self.assertFalse(field["write_only"])
+        self.assertEqual(len(field["options"]), 32)
+        self.assertEqual([option["value"] for option in field["options"]],
+                         [voice["name"] for voice in star_providers.GOOGLE_TTS_VOICES])
+        self.assertEqual(field["default"], star_providers.GOOGLE_TTS_DEFAULT_VOICE)
+        self.assertEqual(field["selected"], star_providers.GOOGLE_TTS_DEFAULT_VOICE)
+        # Unconfigured, the card still advertises the voice it would use.
+        self.assertEqual(google["selected_voice_name"],
+                         star_providers.GOOGLE_TTS_DEFAULT_VOICE)
+        self.assertEqual(google["selected_voice_gender"], "FEMALE")
+        self.assertEqual(google["selected_voice_tier"],
+                         star_providers.VOICE_TIER_CHIRP3_HD)
+
+    def test_google_tts_voice_can_be_changed_without_resending_the_key(self):
+        status, _payload = self.post("/api/providers/configure", {
+            "provider": "google_tts", "config": {"api_key": FAKE_GOOGLE_API_KEY}})
+        self.assertEqual(status, 200)
+
+        status, payload = self.post("/api/providers/configure", {
+            "provider": "google_tts",
+            "config": {"voice_name": "th-TH-Chirp3-HD-Rasalgethi"}})
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["status"], star_providers.READY)
+        self.assertEqual(payload["selected_voice_name"], "th-TH-Chirp3-HD-Rasalgethi")
+        self.assertEqual(payload["selected_voice_gender"], "MALE")
+        self.assertEqual(payload["key_mode"], "api_key")
+        self.assertNotIn(FAKE_GOOGLE_API_KEY, json.dumps(payload))
+
+        # The key is untouched on disk and still absent from every response.
+        self.assertEqual(self.service.providers.get("google_tts").stored(), {
+            "mode": "api_key", "api_key": FAKE_GOOGLE_API_KEY,
+            "voice_name": "th-TH-Chirp3-HD-Rasalgethi"})
+        for path in ("/api/providers", "/api/automation/overview"):
+            _code, body = self.get(path)
+            self.assertNotIn(FAKE_GOOGLE_API_KEY,
+                             json.dumps(body, ensure_ascii=False), path)
+        _code, listing = self.get("/api/providers")
+        google = next(item for item in listing["providers"]
+                      if item["provider"] == "google_tts")
+        field = next(f for f in google["fields"] if f["name"] == "voice_name")
+        self.assertEqual(field["selected"], "th-TH-Chirp3-HD-Rasalgethi")
+
+    def test_google_tts_rejects_an_unknown_voice_over_the_api(self):
+        self.post("/api/providers/configure", {
+            "provider": "google_tts", "config": {"api_key": FAKE_GOOGLE_API_KEY}})
+        status, payload = self.post("/api/providers/configure", {
+            "provider": "google_tts", "config": {"voice_name": "th-TH-Chirp3-HD-Nope"}})
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["field"], "voice_name")
+        self.assertEqual(self.service.providers.get("google_tts").stored(),
+                         {"mode": "api_key", "api_key": FAKE_GOOGLE_API_KEY})
+
     def test_r2_secret_never_leaves_the_server(self):
         status, payload = self.post("/api/providers/configure", {
             "provider": "r2", "account_id": "acct1",

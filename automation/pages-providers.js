@@ -66,6 +66,9 @@
     if (provider.bucket) meta.appendChild(AC.chip('inventory_2', provider.bucket));
     if (provider.page_id) meta.appendChild(AC.chip('flag', provider.page_id));
     if (provider.key_file_mode) meta.appendChild(AC.chip('lock', provider.key_file_mode));
+    if (provider.selected_voice_name) {
+      meta.appendChild(AC.chip('record_voice_over', provider.selected_voice_name));
+    }
     if (provider.fallback) meta.appendChild(AC.chip('alt_route', provider.fallback));
     if (meta.childNodes.length) body.appendChild(meta);
 
@@ -180,7 +183,10 @@
 
   function clearSecretInputs(formHost) {
     $$('[data-field]', formHost).forEach(function (input) {
-      if (input.dataset.kind !== 'boolean') input.value = '';
+      /* A select holds a stored, non-secret choice rather than a typed
+         credential: blanking it would leave the form with no valid value. */
+      if (input.dataset.kind === 'boolean' || input.dataset.kind === 'select') return;
+      input.value = '';
     });
   }
 
@@ -213,6 +219,20 @@
         input.className = 'ac-textarea';
         input.spellcheck = false;
         input.placeholder = '{ "type": "…" }';
+      } else if (field.type === 'select') {
+        input = document.createElement('select');
+        input.className = 'ac-select';
+        (field.options || []).forEach(function (option) {
+          var choice = document.createElement('option');
+          choice.value = option.value;
+          choice.textContent = option.label || option.value;
+          /* The current choice is marked on its own option rather than
+             assigned into the form, so no field is ever prefilled here. */
+          if (option.value === (field.selected || field.default)) {
+            choice.selected = true;
+          }
+          input.appendChild(choice);
+        });
       } else {
         input = document.createElement('input');
         input.className = 'ac-input';
@@ -234,6 +254,7 @@
       }
       wrap.appendChild(input);
 
+      if (field.hint) wrap.appendChild(el('span', 'ac-field-hint', field.hint));
       if (field.write_only) {
         wrap.appendChild(el('span', 'ac-field-hint',
           'ค่านี้ถูกเก็บไว้ที่เซิร์ฟเวอร์เท่านั้น และจะไม่ถูกส่งกลับมาแสดงอีก'));

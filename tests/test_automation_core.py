@@ -624,9 +624,10 @@ class TestProviders(TempEnv):
         def fake_get(url, headers=None):
             calls.append((url, headers))
             return {"voices": [
-                {"name": "th-TH-Standard-A", "languageCodes": ["th-TH"]},
+                {"name": star_providers.GOOGLE_TTS_DEFAULT_VOICE,
+                 "languageCodes": ["th-TH"]},
                 {"name": "en-US-Standard-A", "languageCodes": ["en-US"]},
-                {"name": "th-TH-Wavenet-B", "languageCodes": ["th-TH", "th"]},
+                {"name": "th-TH-Standard-A", "languageCodes": ["th-TH", "th"]},
             ]}
 
         provider.http_get = fake_get
@@ -639,6 +640,7 @@ class TestProviders(TempEnv):
         self.assertTrue(result["live_test"])
         self.assertEqual(result["voice_count"], 3)
         self.assertEqual(result["thai_voice_count"], 2)
+        self.assertTrue(result["selected_voice_available"])
         self.assertIn("no speech synthesised", result["detail"])
         self.assertNotIn(FAKE_GOOGLE_API_KEY, json.dumps(result))
 
@@ -671,6 +673,178 @@ class TestProviders(TempEnv):
             with self.assertRaises(star_providers.ProviderError):
                 self.registry.get("google_tts").configure(
                     {"credentials_path": traversal})
+
+    # -- Thai voice picker ------------------------------------------------
+
+    def test_google_tts_voice_catalogue_is_a_complete_unique_allowlist(self):
+        voices = star_providers.GOOGLE_TTS_VOICES
+        names = [voice["name"] for voice in voices]
+        self.assertEqual(len(names), 32)
+        self.assertEqual(len(set(names)), 32, "a voice is listed twice")
+        for name in names:
+            self.assertTrue(name.startswith("th-TH-"), name)
+        for voice in voices:
+            self.assertIn(voice["gender"], ("FEMALE", "MALE"), voice["name"])
+            self.assertIn(voice["tier"], (star_providers.VOICE_TIER_CHIRP3_HD,
+                                          star_providers.VOICE_TIER_NEURAL2,
+                                          star_providers.VOICE_TIER_STANDARD))
+            self.assertTrue(voice["label"].strip(), voice["name"])
+
+        # The natural picks lead, in the order the operator was promised.
+        self.assertEqual(names[:7], [
+            "th-TH-Chirp3-HD-" + short for short in
+            ("Kore", "Aoede", "Despina", "Charon", "Rasalgethi", "Schedar", "Puck")])
+        self.assertTrue(all(voice["recommended"] for voice in voices[:7]))
+        self.assertFalse(any(voice["recommended"] for voice in voices[7:]))
+
+        default = star_providers.GOOGLE_TTS_VOICE_BY_NAME[
+            star_providers.GOOGLE_TTS_DEFAULT_VOICE]
+        self.assertEqual(names[0], star_providers.GOOGLE_TTS_DEFAULT_VOICE)
+        self.assertEqual(default["gender"], "FEMALE")
+        self.assertEqual(default["tier"], star_providers.VOICE_TIER_CHIRP3_HD)
+        self.assertIn("แนะนำ", default["label"])
+
+        # Chirp3-HD is the natural tier; the two survivors are the older ones.
+        legacy = {voice["name"]: voice["tier"] for voice in voices
+                  if voice["tier"] != star_providers.VOICE_TIER_CHIRP3_HD}
+        self.assertEqual(legacy, {
+            "th-TH-Neural2-C": star_providers.VOICE_TIER_NEURAL2,
+            "th-TH-Standard-A": star_providers.VOICE_TIER_STANDARD})
+
+    def test_google_tts_voice_field_offers_every_voice_without_a_secret(self):
+        provider = self.registry.get("google_tts")
+        field = next(f for f in provider.fields if f["name"] == "voice_name")
+        self.assertEqual(field["type"], "select")
+        self.assertFalse(field["write_only"])
+        self.assertFalse(field["required"])
+        self.assertEqual(field["default"], star_providers.GOOGLE_TTS_DEFAULT_VOICE)
+        self.assertEqual(field["selected"], star_providers.GOOGLE_TTS_DEFAULT_VOICE)
+        values = [option["value"] for option in field["options"]]
+        self.assertEqual(values,
+                         [voice["name"] for voice in star_providers.GOOGLE_TTS_VOICES])
+        for option in field["options"]:
+            self.assertIn(option["gender"], ("FEMALE", "MALE"))
+            self.assertTrue(option["label"])
+
+    def test_google_tts_defaults_a_legacy_config_to_the_recommended_voice(self):
+        """A credential stored before the picker existed keeps working."""
+        provider = self.registry.get("google_tts")
+        self.svc.state.write_credential(
+            "provider_google_tts", {"mode": "api_key", "api_key": FAKE_GOOGLE_API_KEY})
+        self.assertNotIn("voice_name", provider.stored())
+
+        status = provider.status()
+        self.assertEqual(status["status"], star_providers.READY)
+        self.assertEqual(status["selected_voice_name"],
+                         star_providers.GOOGLE_TTS_DEFAULT_VOICE)
+        self.assertEqual(status["selected_voice_gender"], "FEMALE")
+        self.assertEqual(status["selected_voice_tier"],
+                         star_providers.VOICE_TIER_CHIRP3_HD)
+        self.assertTrue(status["selected_voice_label"])
+        self.assertEqual(provider.selected_voice()["name"],
+                         star_providers.GOOGLE_TTS_DEFAULT_VOICE)
+        self.assertNotIn(FAKE_GOOGLE_API_KEY, json.dumps(status))
+
+        # A voice that Google no longer offers must not strand the provider.
+        self.svc.state.write_credential(
+            "provider_google_tts",
+            {"mode": "api_key", "api_key": FAKE_GOOGLE_API_KEY,
+             "voice_name": "th-TH-Retired-Z"})
+        recovered = provider.status()
+        self.assertEqual(recovered["status"], star_providers.READY)
+        self.assertEqual(recovered["selected_voice_name"],
+                         star_providers.GOOGLE_TTS_DEFAULT_VOICE)
+
+    def test_google_tts_rejects_a_voice_outside_the_allowlist(self):
+        provider = self.registry.get("google_tts")
+        for bad in ("th-TH-Chirp3-HD-Nope", "en-US-Chirp3-HD-Kore", "../etc/passwd",
+                    "th-TH-Chirp3-HD-Kore ; rm -rf /", 7, ["th-TH-Standard-A"]):
+            with self.assertRaises(star_providers.ProviderError) as ctx:
+                provider.configure({"api_key": FAKE_GOOGLE_API_KEY, "voice_name": bad})
+            self.assertEqual(ctx.exception.field, "voice_name")
+        self.assertFalse(provider.is_configured(),
+                         "a rejected voice must not store a credential")
+
+    def test_google_tts_initial_configuration_takes_credential_and_voice(self):
+        provider = self.registry.get("google_tts")
+        chosen = "th-TH-Chirp3-HD-Charon"
+        status = provider.configure(
+            {"api_key": FAKE_GOOGLE_API_KEY, "voice_name": chosen})
+        self.assertEqual(status["status"], star_providers.READY)
+        self.assertEqual(status["selected_voice_name"], chosen)
+        self.assertEqual(status["selected_voice_gender"], "MALE")
+        self.assertEqual(provider.stored(), {
+            "mode": "api_key", "api_key": FAKE_GOOGLE_API_KEY, "voice_name": chosen})
+        self.assertNotIn(FAKE_GOOGLE_API_KEY, json.dumps(status))
+
+    def test_google_tts_voice_only_update_keeps_the_stored_key_byte_for_byte(self):
+        provider = self.registry.get("google_tts")
+        provider.configure({"api_key": FAKE_GOOGLE_API_KEY})
+        before = provider.stored()
+
+        status = provider.configure({"voice_name": "th-TH-Chirp3-HD-Aoede"})
+        self.assertEqual(status["status"], star_providers.READY)
+        self.assertEqual(status["selected_voice_name"], "th-TH-Chirp3-HD-Aoede")
+        self.assertEqual(provider.stored(), {
+            "mode": "api_key", "api_key": FAKE_GOOGLE_API_KEY,
+            "voice_name": "th-TH-Chirp3-HD-Aoede"})
+        self.assertEqual(provider.stored()["api_key"], before["api_key"])
+        self.assertNotIn(FAKE_GOOGLE_API_KEY, json.dumps(status))
+
+        # An untouched credential box arrives as an empty string; it must be
+        # ignored rather than wiping the stored key.
+        provider.configure({"api_key": "", "service_account_json": "",
+                            "credentials_path": "",
+                            "voice_name": "th-TH-Chirp3-HD-Puck"})
+        self.assertEqual(provider.stored(), {
+            "mode": "api_key", "api_key": FAKE_GOOGLE_API_KEY,
+            "voice_name": "th-TH-Chirp3-HD-Puck"})
+
+        # And a credential change keeps the voice that was already chosen.
+        provider.configure({"api_key": FAKE_GOOGLE_API_KEY + "2"})
+        self.assertEqual(provider.stored(), {
+            "mode": "api_key", "api_key": FAKE_GOOGLE_API_KEY + "2",
+            "voice_name": "th-TH-Chirp3-HD-Puck"})
+
+    def test_google_tts_voice_update_needs_a_credential_first(self):
+        provider = self.registry.get("google_tts")
+        with self.assertRaises(star_providers.ProviderError) as ctx:
+            provider.configure({"voice_name": "th-TH-Chirp3-HD-Aoede"})
+        self.assertIn("exactly one", ctx.exception.message)
+        self.assertFalse(provider.is_configured())
+
+        provider.configure({"api_key": FAKE_GOOGLE_API_KEY})
+        with self.assertRaises(star_providers.ProviderError) as ctx:
+            provider.configure({})
+        self.assertEqual(ctx.exception.field, "voice_name")
+
+    def test_google_tts_voice_survives_a_service_account_configuration(self):
+        provider = self.registry.get("google_tts")
+        provider.configure({"api_key": FAKE_GOOGLE_API_KEY,
+                            "voice_name": "th-TH-Chirp3-HD-Despina"})
+        status = provider.configure({"service_account_json": {
+            "type": "service_account", "project_id": "star-proj",
+            "private_key": "-----BEGIN PRIVATE KEY-----\nzzz\n-----END PRIVATE KEY-----",
+            "client_email": "tts@star-proj.iam.gserviceaccount.com"}})
+        self.assertEqual(status["selected_voice_name"], "th-TH-Chirp3-HD-Despina")
+        stored = provider.stored()
+        self.assertEqual(stored["mode"], "service_account_json")
+        self.assertEqual(stored["voice_name"], "th-TH-Chirp3-HD-Despina")
+        self.assertNotIn("api_key", stored, "the previous credential mode must go")
+
+    def test_google_tts_live_test_fails_when_the_selected_voice_is_gone(self):
+        provider = self.registry.get("google_tts")
+        provider.configure({"api_key": FAKE_GOOGLE_API_KEY,
+                            "voice_name": "th-TH-Chirp3-HD-Kore"})
+        provider.http_get = lambda url, headers=None: {"voices": [
+            {"name": "th-TH-Standard-A", "languageCodes": ["th-TH"]}]}
+        with mock.patch.dict(os.environ, {"STAR_DISABLE_NETWORK": "0"}):
+            result = provider.test(live=True)
+
+        self.assertEqual(result["status"], star_providers.ERROR)
+        self.assertFalse(result["selected_voice_available"])
+        self.assertIn("th-TH-Chirp3-HD-Kore", result["detail"])
+        self.assertNotIn(FAKE_GOOGLE_API_KEY, json.dumps(result))
 
     def test_r2_validates_bucket_and_url(self):
         good = {"account_id": "acc1", "access_key_id": "AKIAEXAMPLEKEYID",
@@ -751,7 +925,11 @@ class TestAudioStage(TempEnv):
             "https://texttospeech.googleapis.com/v1/text:synthesize",
             {
                 "input": {"text": "เสียงทดสอบภาษาไทย"},
-                "voice": {"languageCode": "th-TH", "ssmlGender": "FEMALE"},
+                "voice": {
+                    "languageCode": "th-TH",
+                    "name": star_providers.GOOGLE_TTS_DEFAULT_VOICE,
+                    "ssmlGender": "FEMALE",
+                },
                 "audioConfig": {"audioEncoding": "MP3"},
             },
             {
@@ -762,7 +940,9 @@ class TestAudioStage(TempEnv):
         target = os.path.join(self.root, "output", "2026-08-11", "audio", "mon.mp3")
         with open(target, "rb") as fh:
             self.assertEqual(fh.read(), mp3)
-        self.assertEqual(result, {"audio_files": 1, "engine": "google_tts"})
+        self.assertEqual(result, {
+            "audio_files": 1, "engine": "google_tts",
+            "voice": star_providers.GOOGLE_TTS_DEFAULT_VOICE})
         self.assertNotIn(FAKE_GOOGLE_API_KEY, json.dumps(ctx.artifacts))
 
     def test_default_transport_is_a_stdlib_json_post_without_network(self):
@@ -828,7 +1008,8 @@ class TestAudioStage(TempEnv):
         texttospeech.SynthesisInput = lambda **kw: ("input", kw)
         texttospeech.VoiceSelectionParams = lambda **kw: ("voice", kw)
         texttospeech.AudioConfig = lambda **kw: ("config", kw)
-        texttospeech.SsmlVoiceGender = types.SimpleNamespace(FEMALE="FEMALE")
+        texttospeech.SsmlVoiceGender = types.SimpleNamespace(
+            FEMALE="FEMALE", MALE="MALE")
         texttospeech.AudioEncoding = types.SimpleNamespace(MP3="MP3")
         google = types.ModuleType("google")
         cloud = types.ModuleType("google.cloud")
@@ -851,11 +1032,102 @@ class TestAudioStage(TempEnv):
         self.assertEqual(calls["synthesize"], {
             "input": ("input", {"text": "service account text"}),
             "voice": ("voice", {
-                "language_code": "th-TH", "ssml_gender": "FEMALE"}),
+                "language_code": "th-TH",
+                "name": star_providers.GOOGLE_TTS_DEFAULT_VOICE,
+                "ssml_gender": "FEMALE"}),
             "audio_config": ("config", {"audio_encoding": "MP3"}),
         })
         with open(out_path, "rb") as fh:
             self.assertEqual(fh.read(), mp3)
+
+    def test_api_key_mode_asks_for_the_selected_voice_by_exact_name(self):
+        self.provider.configure({"api_key": FAKE_GOOGLE_API_KEY,
+                                 "voice_name": "th-TH-Chirp3-HD-Charon"})
+        ctx = self.context()
+        out_path = os.path.join(ctx.stage_dir("audio"), "selected.mp3")
+        calls = []
+
+        def fake_post(url, payload, headers=None):
+            calls.append(payload)
+            return {"audioContent": base64.b64encode(b"ID3-selected").decode("ascii")}
+
+        self.stage.http_post = fake_post
+        with mock.patch.dict(os.environ, {"STAR_DISABLE_NETWORK": "0"}):
+            self.stage._google(ctx, "ข้อความ", out_path)
+
+        # Exact name, Thai language code, and the gender the allowlist holds —
+        # never one a caller could have supplied.
+        self.assertEqual(calls, [{
+            "input": {"text": "ข้อความ"},
+            "voice": {"languageCode": "th-TH",
+                      "name": "th-TH-Chirp3-HD-Charon",
+                      "ssmlGender": "MALE"},
+            "audioConfig": {"audioEncoding": "MP3"},
+        }])
+
+    def test_service_account_mode_asks_for_the_selected_voice_by_exact_name(self):
+        self.provider.configure({"service_account_json": {
+            "type": "service_account",
+            "project_id": "star-proj",
+            "private_key": "-----BEGIN PRIVATE KEY-----\nfake\n-----END PRIVATE KEY-----",
+            "client_email": "tts@star-proj.iam.gserviceaccount.com",
+        }})
+        self.provider.configure({"voice_name": "th-TH-Chirp3-HD-Aoede"})
+        ctx = self.context()
+        out_path = os.path.join(ctx.stage_dir("audio"), "selected-sa.mp3")
+        calls = {}
+
+        texttospeech = types.ModuleType("google.cloud.texttospeech")
+
+        class FakeClient:
+            @classmethod
+            def from_service_account_file(cls, path):
+                return cls()
+
+            def synthesize_speech(self, **kwargs):
+                calls.update(kwargs)
+                return types.SimpleNamespace(audio_content=b"ID3-selected-sa")
+
+        texttospeech.TextToSpeechClient = FakeClient
+        texttospeech.SynthesisInput = lambda **kw: ("input", kw)
+        texttospeech.VoiceSelectionParams = lambda **kw: ("voice", kw)
+        texttospeech.AudioConfig = lambda **kw: ("config", kw)
+        texttospeech.SsmlVoiceGender = types.SimpleNamespace(
+            FEMALE="FEMALE", MALE="MALE")
+        texttospeech.AudioEncoding = types.SimpleNamespace(MP3="MP3")
+        google = types.ModuleType("google")
+        cloud = types.ModuleType("google.cloud")
+        google.cloud = cloud
+        cloud.texttospeech = texttospeech
+        modules = {"google": google, "google.cloud": cloud,
+                   "google.cloud.texttospeech": texttospeech}
+
+        with mock.patch.dict(sys.modules, modules), \
+                mock.patch.dict(os.environ, {"STAR_DISABLE_NETWORK": "0"}):
+            self.stage._google(ctx, "ข้อความ", out_path)
+
+        self.assertEqual(calls["voice"], ("voice", {
+            "language_code": "th-TH",
+            "name": "th-TH-Chirp3-HD-Aoede",
+            "ssml_gender": "FEMALE"}))
+        self.assertEqual(calls["input"], ("input", {"text": "ข้อความ"}))
+        self.assertEqual(calls["audio_config"], ("config", {"audio_encoding": "MP3"}))
+
+    def test_dry_run_names_the_voice_without_synthesising(self):
+        self.provider.configure({"api_key": FAKE_GOOGLE_API_KEY,
+                                 "voice_name": "th-TH-Chirp3-HD-Despina"})
+        self.write_script()
+        ctx = self.context(dry_run=True)
+        self.stage.http_post = mock.Mock(
+            side_effect=AssertionError("a dry run must not synthesise"))
+
+        planned = self.stage.plan(ctx)
+
+        self.stage.http_post.assert_not_called()
+        self.assertTrue(any("th-TH-Chirp3-HD-Despina" in item["description"]
+                            for item in planned), planned)
+        target = os.path.join(self.root, "output", "2026-08-11", "audio", "mon.mp3")
+        self.assertFalse(os.path.exists(target))
 
     def test_api_key_mode_rejects_malformed_or_empty_audio_safely(self):
         self.provider.configure({"api_key": FAKE_GOOGLE_API_KEY})

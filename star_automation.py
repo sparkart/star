@@ -788,11 +788,19 @@ class AudioStage(StageAdapter):
     def _target(self, ctx, date, day):
         return ctx.project_path("output", date, "audio", "%s.mp3" % day)
 
+    def voice(self, ctx):
+        """The exact voice synthesis will ask for, straight from the allowlist."""
+        return ctx.providers.get("google_tts").selected_voice()
+
     def plan(self, ctx):
         engine = self.engine(ctx)
-        ctx.plan("voice-over engine: %s" % (
-            "Google Cloud TTS (paid, per character)" if engine == "google_tts"
-            else "gTTS free fallback (no credential, lower quality)"))
+        if engine == "google_tts":
+            voice = self.voice(ctx)
+            ctx.plan("voice-over engine: Google Cloud TTS (paid, per character); "
+                     "voice %s (%s, %s)" % (voice["name"], voice["gender"], voice["tier"]))
+        else:
+            ctx.plan("voice-over engine: gTTS free fallback "
+                     "(no credential, lower quality)")
         for date in ctx.dates:
             for day in ctx.days:
                 ctx.plan("synthesise %s/%s" % (date, day),
@@ -810,6 +818,7 @@ class AudioStage(StageAdapter):
 
     def execute(self, ctx):
         engine = self.engine(ctx)
+        voice = self.voice(ctx) if engine == "google_tts" else None
         rendered = 0
         for date in ctx.dates:
             for day in ctx.days:
@@ -825,21 +834,32 @@ class AudioStage(StageAdapter):
                     self._gtts(text, tmp)
                 target = self._target(ctx, date, day)
                 atomic_replace(tmp, target)
-                ctx.record("audio", target, {"date": date, "day": day, "engine": engine})
+                meta = {"date": date, "day": day, "engine": engine}
+                if voice:
+                    meta["voice"] = voice["name"]
+                ctx.record("audio", target, meta)
                 rendered += 1
-                ctx.log("audio rendered for %s/%s via %s" % (date, day, engine),
+                ctx.log("audio rendered for %s/%s via %s%s"
+                        % (date, day, engine,
+                           " (%s)" % voice["name"] if voice else ""),
                         stage=self.name)
-        return {"audio_files": rendered, "engine": engine}
+        result = {"audio_files": rendered, "engine": engine}
+        if voice:
+            result["voice"] = voice["name"]
+        return result
 
     def _google(self, ctx, text, out_path):
         star_providers._require_network("google tts synthesis")
         provider = ctx.providers.get("google_tts")
         stored = provider.stored()
+        # Name and gender both come from the backend allowlist; nothing a
+        # browser sent is trusted at synthesis time.
+        voice = provider.selected_voice()
         if stored.get("mode") == "api_key":
             api_key = stored.get("api_key")
             if not isinstance(api_key, str) or not api_key.strip():
                 raise StageFailed("Google Cloud TTS API-key credential is unavailable")
-            self._google_api_key(text, out_path, api_key)
+            self._google_api_key(text, out_path, api_key, voice)
             return
 
         from google.cloud import texttospeech
@@ -848,17 +868,22 @@ class AudioStage(StageAdapter):
         response = client.synthesize_speech(
             input=texttospeech.SynthesisInput(text=text),
             voice=texttospeech.VoiceSelectionParams(
-                language_code="th-TH",
-                ssml_gender=texttospeech.SsmlVoiceGender.FEMALE),
+                language_code=star_providers.GOOGLE_TTS_LANGUAGE_CODE,
+                name=voice["name"],
+                ssml_gender=getattr(texttospeech.SsmlVoiceGender, voice["gender"])),
             audio_config=texttospeech.AudioConfig(
                 audio_encoding=texttospeech.AudioEncoding.MP3))
         with open(out_path, "wb") as fh:
             fh.write(response.audio_content)
 
-    def _google_api_key(self, text, out_path, api_key):
+    def _google_api_key(self, text, out_path, api_key, voice):
         payload = {
             "input": {"text": text},
-            "voice": {"languageCode": "th-TH", "ssmlGender": "FEMALE"},
+            "voice": {
+                "languageCode": star_providers.GOOGLE_TTS_LANGUAGE_CODE,
+                "name": voice["name"],
+                "ssmlGender": voice["gender"],
+            },
             "audioConfig": {"audioEncoding": "MP3"},
         }
         headers = {

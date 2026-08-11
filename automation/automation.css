@@ -168,8 +168,11 @@
   font-size: .78rem;
   line-height: 1.55;
 }
+/* Keeps the native option list dark instead of a white system popup. */
+.ac-select { color-scheme: dark; }
 .ac-input:focus, .ac-textarea:focus, .ac-select:focus { border-color: var(--accent-line); }
-.ac-input[aria-invalid="true"], .ac-textarea[aria-invalid="true"] { border-color: var(--danger); }
+.ac-input[aria-invalid="true"], .ac-textarea[aria-invalid="true"],
+.ac-select[aria-invalid="true"] { border-color: var(--danger); }
 .ac-input::placeholder, .ac-textarea::placeholder { color: var(--text-3); }
 .ac-input:disabled, .ac-textarea:disabled, .ac-select:disabled { opacity: .55; cursor: not-allowed; }
 

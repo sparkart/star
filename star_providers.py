@@ -213,50 +213,256 @@ class ClaudeProvider(Provider):
 SERVICE_ACCOUNT_REQUIRED = ("type", "project_id", "private_key", "client_email")
 GOOGLE_TTS_API_KEY_MAX_LENGTH = 512
 
+GOOGLE_TTS_LANGUAGE_CODE = "th-TH"
+GOOGLE_TTS_DEFAULT_VOICE = "th-TH-Chirp3-HD-Kore"
+
+# Quality tiers, most natural first. Chirp3-HD is the generative tier; Neural2
+# and Standard are the older, flatter ones kept only as an escape hatch.
+VOICE_TIER_CHIRP3_HD = "chirp3_hd"
+VOICE_TIER_NEURAL2 = "neural2"
+VOICE_TIER_STANDARD = "standard"
+
+VOICE_TIER_NAMES = {
+    VOICE_TIER_CHIRP3_HD: "Chirp3-HD",
+    VOICE_TIER_NEURAL2: "Neural2",
+    VOICE_TIER_STANDARD: "Standard",
+}
+VOICE_GENDER_TH = {"FEMALE": "หญิง", "MALE": "ชาย"}
+
+# The allowlist. Every entry is a voice Google currently returns from
+# ListVoices for th-TH, written out with its exact full name so synthesis can
+# ask for it verbatim. Gender is taken from the same metadata and is the only
+# gender the pipeline ever sends — a client-supplied one is never trusted.
+# The first seven are the ones worth using for Star; the rest follow so the
+# operator can still pick anything Google offers.
+_CHIRP3_HD_RECOMMENDED = (
+    ("Kore", "FEMALE", "สดใส สาว เป็นธรรมชาติ"),
+    ("Aoede", "FEMALE", "โปร่งสบาย ฟังลื่น"),
+    ("Despina", "FEMALE", "นุ่มลื่น"),
+    ("Charon", "MALE", "ชัดเจน เล่าข้อมูลดี"),
+    ("Rasalgethi", "MALE", "ให้ข้อมูล ชัดถ้อยชัดคำ"),
+    ("Schedar", "MALE", "สม่ำเสมอ นิ่ง"),
+    ("Puck", "MALE", "กระฉับกระเฉง สดใส"),
+)
+_CHIRP3_HD_OTHERS = (
+    ("Achernar", "FEMALE", "นุ่มเบา"),
+    ("Achird", "MALE", "เป็นมิตร"),
+    ("Algenib", "MALE", "แหบต่ำ"),
+    ("Algieba", "MALE", "นุ่มลื่น"),
+    ("Alnilam", "MALE", "หนักแน่น"),
+    ("Autonoe", "FEMALE", "สดใส"),
+    ("Callirrhoe", "FEMALE", "สบาย ๆ"),
+    ("Enceladus", "MALE", "เสียงลม นุ่ม"),
+    ("Erinome", "FEMALE", "ชัดเจน"),
+    ("Fenrir", "MALE", "ตื่นเต้น เร้าใจ"),
+    ("Gacrux", "FEMALE", "ผู้ใหญ่ สุขุม"),
+    ("Iapetus", "MALE", "ชัดเจน"),
+    ("Laomedeia", "FEMALE", "สดใส กระฉับกระเฉง"),
+    ("Leda", "FEMALE", "วัยรุ่น สดใส"),
+    ("Orus", "MALE", "หนักแน่น"),
+    ("Pulcherrima", "FEMALE", "กระตือรือร้น"),
+    ("Sadachbia", "MALE", "มีชีวิตชีวา"),
+    ("Sadaltager", "MALE", "รอบรู้ น่าเชื่อถือ"),
+    ("Sulafat", "FEMALE", "อบอุ่น"),
+    ("Umbriel", "MALE", "สบาย ๆ"),
+    ("Vindemiatrix", "FEMALE", "อ่อนโยน"),
+    ("Zephyr", "FEMALE", "สดใส"),
+    ("Zubenelgenubi", "MALE", "เป็นกันเอง"),
+)
+_LEGACY_TIER_VOICES = (
+    ("th-TH-Neural2-C", "FEMALE", VOICE_TIER_NEURAL2, "โทนกลาง ฟังง่าย"),
+    ("th-TH-Standard-A", "FEMALE", VOICE_TIER_STANDARD, "พื้นฐาน"),
+)
+
+
+def _voice_entry(name, gender, tier, character, recommended=False):
+    short = name.split("-")[-1] if tier == VOICE_TIER_CHIRP3_HD else name[len("th-TH-"):]
+    label = "%s — %s %s · %s" % (short, VOICE_GENDER_TH[gender], character,
+                                 VOICE_TIER_NAMES[tier])
+    if recommended:
+        label += " · แนะนำสำหรับ Star"
+    elif tier != VOICE_TIER_CHIRP3_HD:
+        label += " (เป็นธรรมชาติน้อยกว่า)"
+    return {
+        "name": name,
+        "gender": gender,
+        "tier": tier,
+        "label": label,
+        "recommended": recommended,
+    }
+
+
+GOOGLE_TTS_VOICES = tuple(
+    [_voice_entry("th-TH-Chirp3-HD-" + short, gender, VOICE_TIER_CHIRP3_HD,
+                  character, recommended=True)
+     for short, gender, character in _CHIRP3_HD_RECOMMENDED]
+    + [_voice_entry("th-TH-Chirp3-HD-" + short, gender, VOICE_TIER_CHIRP3_HD, character)
+       for short, gender, character in _CHIRP3_HD_OTHERS]
+    + [_voice_entry(name, gender, tier, character)
+       for name, gender, tier, character in _LEGACY_TIER_VOICES])
+
+GOOGLE_TTS_VOICE_BY_NAME = {voice["name"]: voice for voice in GOOGLE_TTS_VOICES}
+
+# What the form renderer receives. Non-secret by construction: a voice name is
+# public metadata, so it is the one Google TTS field that is safe to echo back.
+GOOGLE_TTS_VOICE_OPTIONS = tuple(
+    {"value": voice["name"], "label": voice["label"],
+     "gender": voice["gender"], "tier": voice["tier"],
+     "recommended": voice["recommended"]}
+    for voice in GOOGLE_TTS_VOICES)
+
 
 class GoogleTtsProvider(Provider):
     key = "google_tts"
     label = "Google Cloud Text-to-Speech"
     automation = AUTOMATION_FULL
-    fields = (
+    BASE_FIELDS = (
         {"name": "api_key", "type": "password", "write_only": True, "required": False,
          "label": "Google Cloud API key"},
         {"name": "service_account_json", "type": "json", "write_only": True, "required": False,
          "label": "Service account JSON"},
         {"name": "credentials_path", "type": "text", "write_only": False, "required": False,
          "label": "Path to an already-uploaded key (inside the state directory)"},
+        {"name": "voice_name", "type": "select", "write_only": False, "required": False,
+         "label": "เสียงพากย์ภาษาไทย",
+         "hint": "เปลี่ยนเสียงได้โดยไม่ต้องกรอกข้อมูลรับรองใหม่ "
+                 "ระบบอ่านข้อความล้วน ไม่ปรับระดับเสียงหรือความเร็ว",
+         "default": GOOGLE_TTS_DEFAULT_VOICE,
+         "options": GOOGLE_TTS_VOICE_OPTIONS},
     )
+    CREDENTIAL_FIELDS = ("api_key", "service_account_json", "credentials_path")
     prerequisites = (
         "A Google Cloud project with the Text-to-Speech API enabled.",
         "An API key permitted to use Text-to-Speech, or a service-account key "
         "with the Cloud Text-to-Speech User role.",
     )
     docs = ("Configure exactly one API key or service-account credential. "
-            "gTTS remains an explicit free fallback and needs no credentials.")
+            "The Thai voice is a separate, non-secret setting that can be changed "
+            "on its own. gTTS remains an explicit free fallback and needs no credentials.")
     VOICES_URL = "https://texttospeech.googleapis.com/v1/voices?languageCode=th-TH"
     http_get = None  # injectable for tests
 
-    def configure(self, payload):
-        modes = {
-            "api_key": payload.get("api_key"),
-            "service_account_json": payload.get("service_account_json"),
-            "credentials_path": payload.get("credentials_path"),
+    # -- voice ----------------------------------------------------------
+    @property
+    def fields(self):
+        """Static descriptors plus the current selection.
+
+        The renderer stays generic: it preselects `selected` for any select
+        field instead of knowing what a Thai voice is.
+        """
+        selected = self.selected_voice()["name"]
+        out = []
+        for field in self.BASE_FIELDS:
+            field = dict(field)
+            if field["name"] == "voice_name":
+                field["selected"] = selected
+            out.append(field)
+        return tuple(out)
+
+    def selected_voice(self):
+        """Resolved catalogue entry, never None.
+
+        A config written before the picker existed has no `voice_name`, and a
+        hand-edited one may name a voice that is no longer in the allowlist.
+        Both resolve to the recommended default rather than turning a working
+        provider into an unready one.
+        """
+        try:
+            stored = self.stored() or {}
+        except StateError:
+            stored = {}
+        return (GOOGLE_TTS_VOICE_BY_NAME.get(stored.get("voice_name"))
+                or GOOGLE_TTS_VOICE_BY_NAME[GOOGLE_TTS_DEFAULT_VOICE])
+
+    def _status(self, status, detail, **extra):
+        """Every google_tts status carries the resolved voice.
+
+        Voice name, label, gender and tier are public metadata, so they are
+        safe on a `not_configured` card as well as a ready one.
+        """
+        voice = self.selected_voice()
+        payload = {
+            "selected_voice_name": voice["name"],
+            "selected_voice_label": voice["label"],
+            "selected_voice_gender": voice["gender"],
+            "selected_voice_tier": voice["tier"],
         }
-        selected = [name for name, value in modes.items() if value is not None]
-        if len(selected) != 1:
+        payload.update(extra)
+        return Provider._status(self, status, detail, **payload)
+
+    @staticmethod
+    def _voice_field(payload):
+        value = payload.get("voice_name")
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ProviderError("voice_name must be a string", "voice_name")
+        value = value.strip()
+        if not value:
+            return None
+        if value not in GOOGLE_TTS_VOICE_BY_NAME:
+            raise ProviderError(
+                "unknown voice_name; choose one of the %d supported %s voices"
+                % (len(GOOGLE_TTS_VOICES), GOOGLE_TTS_LANGUAGE_CODE), "voice_name")
+        return value
+
+    def _supplied_credentials(self, payload):
+        """Credential fields the caller actually set.
+
+        Once a credential is stored, a blank string means "leave it alone", so
+        an untouched password box cannot wipe the stored key while the operator
+        is only changing the voice. On a first configure a blank value is still
+        a per-field error rather than a silent no-op.
+        """
+        configured = self.is_configured()
+        supplied = []
+        for name in self.CREDENTIAL_FIELDS:
+            value = payload.get(name)
+            if value is None:
+                continue
+            if configured and isinstance(value, str) and not value.strip():
+                continue
+            supplied.append(name)
+        return supplied
+
+    # -- configuration --------------------------------------------------
+    def configure(self, payload):
+        voice_name = self._voice_field(payload)
+        supplied = self._supplied_credentials(payload)
+        stored = self.stored()
+
+        if not supplied:
+            # Voice-only update: the stored credential is copied across
+            # untouched, so changing the voice never re-asks for the key.
+            if not stored:
+                raise ProviderError(
+                    "provide exactly one of api_key, service_account_json, or credentials_path")
+            if voice_name is None:
+                raise ProviderError(
+                    "nothing to update: supply a credential or a voice_name", "voice_name")
+            updated = dict(stored)
+            updated["voice_name"] = voice_name
+            self.save(updated)
+            return self.status()
+
+        if len(supplied) != 1:
             raise ProviderError(
                 "provide exactly one of api_key, service_account_json, or credentials_path")
 
-        selected_mode = selected[0]
+        # A credential change keeps whatever voice was already chosen.
+        if voice_name is None:
+            voice_name = stored.get("voice_name")
+
+        selected_mode = supplied[0]
         if selected_mode == "api_key":
             api_key = _str_field(payload, "api_key", max_len=GOOGLE_TTS_API_KEY_MAX_LENGTH)
             # `_str_field` strips strings, so reject a whitespace-only value too.
             if not api_key:
                 raise ProviderError("api_key must not be empty", "api_key")
-            self.save({"mode": "api_key", "api_key": api_key})
+            self.save(self._with_voice({"mode": "api_key", "api_key": api_key}, voice_name))
             return self.status()
 
-        raw = modes["service_account_json"]
+        raw = payload.get("service_account_json")
         if selected_mode == "service_account_json":
             if isinstance(raw, str):
                 try:
@@ -278,12 +484,12 @@ class GoogleTtsProvider(Provider):
             key_path = os.path.join(self.state.subdir("credentials"),
                                     "google_tts_service_account.json")
             self.state.write_json(key_path, raw)
-            self.save({
+            self.save(self._with_voice({
                 "mode": "service_account_json",
                 "credentials_path": key_path,
                 "project_id": raw.get("project_id"),
                 "client_email": raw.get("client_email"),
-            })
+            }, voice_name))
             return self.status()
 
         # Path mode: only ever inside the state directory, so this endpoint can
@@ -305,13 +511,24 @@ class GoogleTtsProvider(Provider):
             raise ProviderError(
                 "file at credentials_path is missing: %s" % ", ".join(missing),
                 "credentials_path")
-        self.save({
+        self.save(self._with_voice({
             "mode": "credentials_path",
             "credentials_path": resolved,
             "project_id": data.get("project_id"),
             "client_email": data.get("client_email"),
-        })
+        }, voice_name))
         return self.status()
+
+    @staticmethod
+    def _with_voice(record, voice_name):
+        """Persist the voice beside the credential, and only when there is one.
+
+        A record without `voice_name` stays valid: it resolves to the
+        recommended default on read.
+        """
+        if voice_name:
+            record["voice_name"] = voice_name
+        return record
 
     def credentials_path(self):
         return (self.stored() or {}).get("credentials_path")
@@ -370,8 +587,10 @@ class GoogleTtsProvider(Provider):
             voices = client.list_voices(timeout=HTTP_TIMEOUT)
             thai = [v.name for v in voices.voices if any(
                 code.startswith("th") for code in v.language_codes)]
-            return self._status(READY, "listed %d voices (%d Thai); no speech synthesised"
-                                % (len(voices.voices), len(thai)), live_test=True)
+            available = self.selected_voice()["name"] in {v.name for v in voices.voices}
+            return self._status(
+                *self._voice_listing_result(len(voices.voices), len(thai), available),
+                selected_voice_available=available, live_test=True)
         except ImportError:
             return self._status(CONFIGURED,
                                 "google-cloud-texttospeech is not installed; "
@@ -379,6 +598,21 @@ class GoogleTtsProvider(Provider):
         except Exception as exc:  # noqa: BLE001 - surface a safe summary only
             return self._status(ERROR, "live voice listing failed: %s"
                                 % star_redact.redact_text(str(exc), limit=200), live_test=True)
+
+    def _voice_listing_result(self, total, thai_count, available):
+        """Status + detail for a metadata-only listing. Never synthesises.
+
+        A missing voice is an error, not a footnote: the stage would otherwise
+        fail later with Google's own message in the middle of a paid run.
+        """
+        selected = self.selected_voice()["name"]
+        if not available:
+            return (ERROR,
+                    "listed %d voices (%d Thai) but the selected voice %s is not among "
+                    "them; choose another voice" % (total, thai_count, selected))
+        return (READY,
+                "listed %d voices (%d Thai); selected voice %s is available; "
+                "no speech synthesised" % (total, thai_count, selected))
 
     @staticmethod
     def _api_key_schema_error(stored):
@@ -413,18 +647,23 @@ class GoogleTtsProvider(Provider):
             if not isinstance(voices, list):
                 raise ValueError("response did not contain a voices list")
             thai_count = 0
+            names = set()
             for voice in voices:
-                language_codes = voice.get("languageCodes") \
-                    if isinstance(voice, dict) else None
+                if not isinstance(voice, dict):
+                    continue
+                if isinstance(voice.get("name"), str):
+                    names.add(voice["name"])
+                language_codes = voice.get("languageCodes")
                 if isinstance(language_codes, list) and any(
                         isinstance(code, str) and code.lower().startswith("th")
                         for code in language_codes):
                     thai_count += 1
+            available = self.selected_voice()["name"] in names
             return self._status(
-                READY, "listed %d voices (%d Thai); no speech synthesised"
-                % (len(voices), thai_count),
+                *self._voice_listing_result(len(voices), thai_count, available),
                 key_mode="api_key", masked_hint=star_redact.mask_tail(api_key),
-                voice_count=len(voices), thai_voice_count=thai_count, live_test=True)
+                voice_count=len(voices), thai_voice_count=thai_count,
+                selected_voice_available=available, live_test=True)
         except Exception as exc:  # noqa: BLE001 - return only a redacted summary
             try:
                 error = str(exc)

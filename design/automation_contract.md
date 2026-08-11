@@ -102,7 +102,7 @@ Each pipeline stage must implement a class with:
 |-------|--------------|
 | **astro** | Use existing deterministic Swiss Ephemeris scripts. Output per-day JSON under `content/horoscope` and raw data under `content/raw_astro`. Must produce 7 day entries (one per birth-day) with scores. |
 | **script** | Use Claude CLI with `--print` and `--config-dir`. One script per date/day at `content/scripts/claude_{date}_{day}.txt`. Skip if exists unless `force=true`. Must handle retries, fallback to rule-based generator if API fails, and enforce max 300 chars. |
-| **audio** | Google Cloud TTS when configured; gTTS as fallback. Output MP3 under `output/{date}/audio/`. Must accept an API key, service_account_json, or a service-account credentials path. |
+| **audio** | Google Cloud TTS when configured; gTTS as fallback. Output MP3 under `output/{date}/audio/`. Must accept an API key, service_account_json, or a service-account credentials path, plus a `voice_name` from the backend th-TH allowlist (default `th-TH-Chirp3-HD-Kore`). Both credential paths must synthesise with that exact voice name and `th-TH`, using plain text and MP3 — no SSML, pitch or rate changes. |
 | **video** | FFmpeg only, 1080x1920 MP4. Must use installed Thai font (discovered via safe search). No shell=True. Output under `output/{date}/video/`. |
 | **publish** | Implement real adapters for YouTube, Facebook, LINE, R2. TikTok/Shopee must generate manual handoff package (ZIP with instructions) and never claim published. |
 
@@ -161,6 +161,14 @@ class PipelineAdapter:
 - PKCE flow for YouTube, Facebook, LINE
 - Tokens never appear in query parameters or logs
 - Refresh tokens auto-renewed when near expiry
+
+### 5.2b Non-secret Provider Settings
+- A provider field may be a `select` with `options[]` (`value`, `label`, `gender`, `tier`, `recommended`), a `default` and the current `selected` value; the form renderer is generic and must not special-case any provider.
+- `google_tts.voice_name` is such a field: public metadata, stored beside the credential and echoed back as `selected_voice_name` / `_label` / `_gender` / `_tier`.
+- Values are accepted only from the backend allowlist; an unknown voice is a 400 on `voice_name`.
+- Submitting `voice_name` alone updates the voice and rewrites the stored credential unchanged — the operator never re-enters an API key or service account to change voices. Supplying a credential still means exactly one credential mode, and blank fields are ignored once a credential is stored.
+- A config saved without `voice_name` resolves to `th-TH-Chirp3-HD-Kore` on read and stays `ready`.
+- The live test is ListVoices only; it reports `selected_voice_available` and fails with `error` when Google no longer lists the selected voice. It never synthesises.
 
 ### 5.3 Input Sanitization
 - All user inputs must be sanitized

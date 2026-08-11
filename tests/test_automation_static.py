@@ -560,6 +560,13 @@ class TestSecretHandling(unittest.TestCase):
         self.assertNotIn("input.value =", build,
                          "a configure form must not prefill any value")
 
+    def test_a_select_keeps_its_stored_choice_when_secrets_are_cleared(self):
+        """Blanking a select would leave the form with no valid value, and a
+        voice name is not a secret in the first place."""
+        clearer = js_function_body(self.js, "clearSecretInputs")
+        self.assertIn("input.dataset.kind === 'select'", clearer)
+        self.assertIn("return;", clearer)
+
     def test_only_the_providers_page_can_write_a_credential(self):
         for _key, _path, module, _url in PAGES:
             if module.endswith("pages-providers.js"):
@@ -572,6 +579,57 @@ class TestSecretHandling(unittest.TestCase):
         self.assertIn("method !== 'GET'", api)
         self.assertIn("credentials: 'same-origin'", api)
         self.assertIn("X-Star-Intent", self.core)
+
+
+class TestProviderFormRenderer(unittest.TestCase):
+    """The configure form is built from field descriptors, so the voice picker
+    must arrive as data rather than as a branch in the page."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.js = source_of(os.path.join("automation", "pages-providers.js"))
+        cls.css = source_of(os.path.join("automation", "automation.css"))
+
+    def test_select_fields_are_built_from_the_backend_options(self):
+        build = js_function_body(self.js, "buildConfigForm")
+        self.assertIn("field.type === 'select'", build)
+        self.assertIn("createElement('select')", build)
+        self.assertIn("ac-select", build)
+        self.assertIn("field.options", build)
+        self.assertIn("option.label || option.value", build)
+
+    def test_the_current_choice_is_marked_on_its_option(self):
+        """Preselecting by marking an option keeps the "nothing is ever
+        prefilled" rule literally true for every field on the form."""
+        build = js_function_body(self.js, "buildConfigForm")
+        self.assertIn("field.selected || field.default", build)
+        self.assertIn("choice.selected = true;", build)
+        self.assertNotIn("input.value =", build)
+
+    def test_the_renderer_hard_codes_no_provider_and_no_voice(self):
+        build = js_function_body(self.js, "buildConfigForm")
+        for term in ("google_tts", "voice_name", "th-TH", "Chirp3", "Kore"):
+            self.assertNotIn(term, build,
+                             "%s is hard coded in the provider form" % term)
+
+    def test_no_voice_name_is_duplicated_into_the_page(self):
+        for voice in star_providers.GOOGLE_TTS_VOICES:
+            self.assertNotIn(voice["name"], self.js, voice["name"])
+
+    def test_every_offered_voice_is_a_safe_select_option(self):
+        field = next(f for f in star_providers.GoogleTtsProvider.BASE_FIELDS
+                     if f["name"] == "voice_name")
+        self.assertEqual(field["type"], "select")
+        self.assertFalse(field["write_only"])
+        self.assertEqual(len(field["options"]), 32)
+        for option in field["options"]:
+            self.assertEqual(set(option),
+                             {"value", "label", "gender", "tier", "recommended"})
+            self.assertIn(option["value"], star_providers.GOOGLE_TTS_VOICE_BY_NAME)
+
+    def test_the_select_is_styled_for_the_dark_surface(self):
+        self.assertIn(".ac-select", self.css)
+        self.assertIn('.ac-select[aria-invalid="true"]', self.css)
 
 
 class TestGuidePage(unittest.TestCase):
