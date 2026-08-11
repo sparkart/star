@@ -1,111 +1,646 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>📊 Star Content API</title>
-  <link rel="stylesheet" href="/shared.css">
-  <meta name="robots" content="noindex">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="robots" content="noindex">
+<meta name="description" content="คลังคอนเทนต์ดวงรายวันและสถานะ API ของระบบ Star">
+<title>คลังคอนเทนต์ · Star Content Ops</title>
+
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23e0b768' d='M12 1.5c.35 4.6 2.4 7.4 6.9 8.3-4.5.9-6.55 3.7-6.9 8.3-.35-4.6-2.4-7.4-6.9-8.3 4.5-.9 6.55-3.7 6.9-8.3Z'/%3E%3C/svg%3E">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300..600,0..1,0&display=block">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/workspace.css">
 </head>
 <body>
 
-<button class="hamburger" id="hamburger" aria-label="Toggle sidebar" aria-expanded="false">☰</button>
+<a class="skip-link" href="#workspace">ข้ามไปยังเนื้อหาหลัก</a>
 
-<aside class="sidebar" id="sidebar">
-  <a href="/" class="brand">✨ Star</a>
-  <ul class="nav-links">
-    <li><a href="/">🏠 Home</a></li>
-    <li><a href="/howto/">📚 Guidebook</a></li>
-    <li><a href="/content/" class="active">📊 Content</a></li>
-    <li><a href="/automation/">🤖 Automation</a></li>
-  </ul>
-  <div class="sub-nav" id="subNav"></div>
-</aside>
+<!-- ── Top bar ─────────────────────────────────────────── -->
+<header class="topbar">
+  <button class="icon-btn hamburger" id="hamburger" type="button"
+          aria-label="เปิดเมนูนำทาง" aria-expanded="false" aria-controls="sidebar">
+    <span class="ms" aria-hidden="true">menu</span>
+  </button>
 
-<main class="main">
+  <a href="/" class="brand" aria-label="Star — หน้าแรก">
+    <svg class="brand-mark" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+      <path d="M12 1.5c.35 4.6 2.4 7.4 6.9 8.3v0c-4.5.9-6.55 3.7-6.9 8.3-.35-4.6-2.4-7.4-6.9-8.3v0c4.5-.9 6.55-3.7 6.9-8.3Z" fill="currentColor"/>
+      <circle cx="19.6" cy="17.4" r="1.5" fill="currentColor" opacity=".6"/>
+      <circle cx="5.2" cy="4.6" r="1" fill="currentColor" opacity=".45"/>
+    </svg>
+    <span class="brand-name">Star</span>
+    <span class="brand-sub">Content Ops</span>
+  </a>
 
-<h1>📊 Content & API Insights</h1>
-<p><em>สถิติการผลิตคอนเทนต์อัตโนมัติและ API Endpoints</em></p>
+  <div class="topbar-spacer"></div>
 
-<hr>
+  <div class="meta-chip">
+    <span class="ms" aria-hidden="true">folder_open</span>
+    <span>คลัง 11 ส.ค. – 10 ก.ย. 2569</span>
+  </div>
 
-<h2 id="stats">📈 Production Stats</h2>
+  <div class="sync-chip" id="api-chip" title="สถานะการเชื่อมต่อ API">
+    <span class="dot" aria-hidden="true"></span>
+    <span id="api-chip-text">กำลังตรวจสอบ…</span>
+  </div>
 
-<table>
-  <tr><th>Metric</th><th>Value</th></tr>
-  <tr><td>📝 Content Scripts</td><td><strong>217</strong> บท</td></tr>
-  <tr><td>📅 Days Covered</td><td><strong>31</strong> วัน</td></tr>
-  <tr><td>🎤 TTS Audio</td><td><strong>พร้อมสำหรับ production</strong></td></tr>
-  <tr><td>🎬 Video Ready</td><td><strong>รอ CapCut batch</strong></td></tr>
-  <tr><td>💲 Cost/Day</td><td><strong>~฿0.30/วิดีโอ</strong></td></tr>
-  <tr><td>⚡ Generation Time</td><td><strong>~3 วิ/บท (DeepSeek)</strong></td></tr>
-  <tr><td>☁️ Storage</td><td><strong>star.panupong.net/content/</strong></td></tr>
-</table>
+  <button class="icon-btn" id="api-refresh" type="button"
+          aria-label="ตรวจสอบสถานะ API อีกครั้ง" title="ตรวจสอบสถานะ API อีกครั้ง">
+    <span class="ms" aria-hidden="true">refresh</span>
+  </button>
+</header>
 
-<h2 id="api">🔌 API Endpoints</h2>
+<div class="shell">
 
-<table>
-  <tr><th>Endpoint</th><th>Method</th><th>Description</th></tr>
-  <tr><td><code>/content/</code></td><td>GET</td><td>หน้านี้ — สถิติ + API docs</td></tr>
-  <tr><td><code>/content/registry.db</code></td><td>—</td><td>SQLite database — metadata ทั้งหมด</td></tr>
-  <tr><td><code>/content/scripts/</code></td><td>—</td><td>บทพากย์ทั้ง 217 ไฟล์</td></tr>
-  <tr><td><code>/content/json/</code></td><td>—</td><td>ข้อมูลดวงในรูปแบบ JSON</td></tr>
-</table>
+  <!-- ── Sidebar ───────────────────────────────────────── -->
+  <aside class="sidebar" id="sidebar" aria-label="เมนูนำทางหลัก">
+    <nav class="nav-links" aria-label="ส่วนงาน">
+      <span class="nav-group-label">งานผลิต</span>
+      <a href="/">
+        <span class="ms" aria-hidden="true">calendar_month</span><span>ปฏิทินการผลิต</span>
+      </a>
+      <a href="/content/" class="active" aria-current="page">
+        <span class="ms" aria-hidden="true">folder_open</span><span>คลังคอนเทนต์</span>
+      </a>
+      <span class="nav-group-label">ระบบ</span>
+      <a href="/automation/">
+        <span class="ms" aria-hidden="true">bolt</span><span>ระบบอัตโนมัติ</span>
+      </a>
+      <a href="/howto/">
+        <span class="ms" aria-hidden="true">menu_book</span><span>คู่มือระบบ</span>
+      </a>
+    </nav>
 
-<h2 id="how-it-works">⚙️ How It Works</h2>
+    <div class="sub-nav" id="subNav"></div>
 
-<pre><code>
-POST /compute  → Swiss Ephemeris คำนวณดวง
-     ↓
-POST /generate → AI (DeepSeek/Claude) เขียนบท
-     ↓
-POST /tts      → Google Chirp3 HD สร้างเสียง
-     ↓
-POST /render   → CapCut ประกอบวิดีโอ
-     ↓
-POST /publish  → YouTube/TikTok/LINE
-</code></pre>
+    <div class="sidebar-foot">
+      <div class="legend-title">สถานะบริการ</div>
+      <ul class="legend">
+        <li><i class="legend-dot is-done" aria-hidden="true"></i>ปกติ</li>
+        <li><i class="legend-dot is-partial" aria-hidden="true"></i>ทำงานได้บางส่วน</li>
+        <li><i class="legend-dot is-failed" aria-hidden="true"></i>ใช้งานไม่ได้</li>
+        <li><i class="legend-dot is-none" aria-hidden="true"></i>ไม่ทราบสถานะ</li>
+      </ul>
+    </div>
+  </aside>
+  <div class="nav-scrim" id="nav-scrim" hidden></div>
 
-</main>
+  <!-- ── Main workspace ────────────────────────────────── -->
+  <main class="main" id="app">
 
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-  const hamburger = document.getElementById('hamburger');
-  const sidebar = document.getElementById('sidebar');
-  const subNav = document.getElementById('subNav');
-  
-  hamburger.addEventListener('click', function() {
-    const isOpen = sidebar.classList.toggle('sidebar-open');
-    hamburger.setAttribute('aria-expanded', isOpen);
-  });
-  
-  if (subNav) {
-    document.querySelectorAll('.main h2[id], .main h3[id]').forEach(function(heading) {
-      var link = document.createElement('a');
-      link.href = '#' + heading.id;
-      link.textContent = heading.textContent;
-      link.className = heading.tagName === 'H2' ? 'sub-main' : 'sub-child';
-      subNav.appendChild(link);
-    });
+    <div class="workspace-head" id="workspace">
+      <div class="workspace-title">
+        <span class="eyebrow">Workspace</span>
+        <h1>คลังคอนเทนต์ &amp; สถานะ API</h1>
+        <p class="workspace-desc">
+          สรุปผลผลิตของสายการผลิตดวงรายวัน พร้อมตัวเลขสดจาก <code class="inline">/api/stats</code>
+          และสถานะบริการจาก <code class="inline">/api/health</code>
+        </p>
+      </div>
+      <div class="workspace-cta">
+        <button class="btn" type="button" data-copy="https://star.panupong.net/content/"
+                data-copy-label="ลิงก์คลังคอนเทนต์">
+          <span class="ms" aria-hidden="true">content_copy</span>
+          <span class="btn-label">คัดลอกลิงก์คลัง</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ══ 01 · Live API ══ -->
+    <section class="doc-section" id="api-live" aria-labelledby="live-stats">
+      <div class="section-head">
+        <h2 id="live-stats" data-nav-label="ตัวเลขสดจาก API">
+          <span class="section-index" aria-hidden="true">01</span>
+          <span>ตัวเลขสดจาก API</span>
+        </h2>
+        <span class="section-aside">GET /api/stats</span>
+      </div>
+
+      <div id="stats-skeleton">
+        <div class="stat-row" aria-hidden="true">
+          <div class="stat"><span class="stat-label">กำลังโหลด</span><span class="sk sk-line sk-row"></span></div>
+          <div class="stat"><span class="stat-label">กำลังโหลด</span><span class="sk sk-line sk-row"></span></div>
+          <div class="stat"><span class="stat-label">กำลังโหลด</span><span class="sk sk-line sk-row"></span></div>
+          <div class="stat"><span class="stat-label">กำลังโหลด</span><span class="sk sk-line sk-row"></span></div>
+        </div>
+        <p class="section-desc">กำลังเรียกข้อมูลจาก <code class="inline">/api/stats</code>…</p>
+      </div>
+
+      <div id="stats-row" hidden>
+        <div class="stat-row">
+          <div class="stat">
+            <span class="stat-label">บทพากย์ทั้งหมด</span>
+            <span class="stat-value" data-stat="scripts" data-state="loading">—</span>
+            <span class="stat-meta">ไฟล์บทในคลัง</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">วันที่ครอบคลุม</span>
+            <span class="stat-value" data-stat="days" data-state="loading">—</span>
+            <span class="stat-meta">วันในปฏิทินการผลิต</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">ไฟล์เสียง TTS</span>
+            <span class="stat-value" data-stat="audio" data-state="loading">—</span>
+            <span class="stat-meta">Google Chirp3 HD</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">วิดีโอที่เรนเดอร์แล้ว</span>
+            <span class="stat-value" data-stat="videos" data-state="loading">—</span>
+            <span class="stat-meta">ผ่าน CapCut batch</span>
+          </div>
+        </div>
+        <p class="section-desc" id="stats-stamp"></p>
+      </div>
+
+      <div class="state-block" id="stats-error" hidden role="status">
+        <span class="ms state-icon" aria-hidden="true">cloud_off</span>
+        <p class="state-title">ยังไม่มีตัวเลขสดจาก API</p>
+        <p class="state-desc" id="stats-error-desc"></p>
+        <button class="btn btn-sm" type="button" data-api-retry>
+          <span class="ms" aria-hidden="true">refresh</span>
+          <span class="btn-label">ลองใหม่</span>
+        </button>
+      </div>
+
+      <div class="sub-head">
+        <h3 id="service-health" data-nav-label="สถานะบริการ">สถานะบริการ</h3>
+        <span class="sub-note">GET /api/health</span>
+      </div>
+
+      <div class="panel-card is-flush" id="health-skeleton">
+        <div class="panel-card-body" aria-hidden="true">
+          <span class="sk sk-line sk-chip"></span>
+          <span class="sk sk-line sk-row" style="margin-top:.6rem"></span>
+          <span class="sk sk-line sk-row"></span>
+        </div>
+      </div>
+
+      <div class="panel-card is-flush" id="health-body" hidden>
+        <div class="panel-card-head">
+          <h3>ผลตรวจสุขภาพระบบ</h3>
+          <div class="chip-row" id="health-summary"></div>
+        </div>
+        <ul class="check-list" id="health-checks"></ul>
+        <div class="panel-card-foot">
+          รายการตรวจมาจากฟิลด์ <code class="inline">checks</code> ใน payload ของ <code class="inline">/api/health</code>
+        </div>
+      </div>
+
+      <div class="state-block" id="health-error" hidden role="status">
+        <span class="ms state-icon" aria-hidden="true">monitor_heart</span>
+        <p class="state-title">ตรวจสถานะบริการไม่สำเร็จ</p>
+        <p class="state-desc" id="health-error-desc"></p>
+        <button class="btn btn-sm" type="button" data-api-retry>
+          <span class="ms" aria-hidden="true">refresh</span>
+          <span class="btn-label">ลองใหม่</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ══ 02 · Library ══ -->
+    <section class="doc-section" id="library" aria-labelledby="library-h">
+      <div class="section-head">
+        <h2 id="library-h" data-nav-label="คลังคอนเทนต์">
+          <span class="section-index" aria-hidden="true">02</span>
+          <span>คลังคอนเทนต์</span>
+        </h2>
+        <span class="section-aside">star.panupong.net/content/</span>
+      </div>
+
+      <div class="prose">
+        <p>
+          ตัวเลขในตารางนี้นับจากไฟล์จริงบนดิสก์ จึงใช้อ้างอิงได้แม้ API จะยังไม่ตอบกลับ
+          คลังครอบคลุม <strong>31 วัน</strong> ตั้งแต่ 11 ส.ค. ถึง 10 ก.ย. 2569
+          รวม <strong>217 ชุดบท</strong> พร้อมแคปชั่นและแฮชแท็กตามวันในสัปดาห์
+        </p>
+      </div>
+
+      <div class="panel-card is-flush">
+        <div class="filter-bar">
+          <div class="search-field">
+            <span class="ms" aria-hidden="true">search</span>
+            <input id="lib-filter" type="search" aria-label="ค้นหาในคลังคอนเทนต์"
+                   placeholder="ค้นหาชุดข้อมูลหรือเส้นทางไฟล์"
+                   data-filter-input
+                   data-filter-target="#lib-table"
+                   data-filter-count="#lib-count"
+                   data-filter-empty="#lib-empty"
+                   autocomplete="off">
+            <button class="icon-btn icon-btn-sm search-clear" type="button" aria-label="ล้างคำค้นหา">
+              <span class="ms" aria-hidden="true">close</span>
+            </button>
+          </div>
+          <span class="filter-count" id="lib-count"></span>
+        </div>
+
+        <div class="table-wrap">
+          <table class="data" id="lib-table">
+            <caption>ชุดข้อมูลในคลัง แยกตามที่จัดเก็บ</caption>
+            <thead>
+              <tr>
+                <th scope="col">ชุดข้อมูล</th>
+                <th scope="col" class="mono">เส้นทาง</th>
+                <th scope="col" class="num">จำนวน</th>
+                <th scope="col">รายละเอียด</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>บทพากย์</td>
+                <td class="mono">/content/scripts/</td>
+                <td class="num">434</td>
+                <td>217 ชุด × 2 เวอร์ชัน (ร่างจาก AI และบทที่ใช้จริง)</td>
+              </tr>
+              <tr>
+                <td>ข้อมูลดวงรายวัน</td>
+                <td class="mono">/content/horoscope/</td>
+                <td class="num">31</td>
+                <td>JSON รูปแบบ astro_v3 หนึ่งไฟล์ต่อวัน</td>
+              </tr>
+              <tr>
+                <td>ผลคำนวณดิบ</td>
+                <td class="mono">/content/raw/</td>
+                <td class="num">31</td>
+                <td>ผลลัพธ์ตรงจาก Swiss Ephemeris ก่อนแปลงรูปแบบ</td>
+              </tr>
+              <tr>
+                <td>ช่วงวันที่ครอบคลุม</td>
+                <td class="mono">2026-08-11 → 2026-09-10</td>
+                <td class="num">31</td>
+                <td>วันที่มีบทและข้อมูลดวงครบ</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="state-block" id="lib-empty" hidden>
+          <span class="ms state-icon" aria-hidden="true">search_off</span>
+          <p class="state-title">ไม่พบรายการที่ตรงกับคำค้นหา</p>
+          <p class="state-desc">ลองใช้คำสั้นลง เช่น ชื่อโฟลเดอร์หรือส่วนหนึ่งของเส้นทางไฟล์</p>
+        </div>
+      </div>
+
+      <div class="sub-head">
+        <h3 id="production-facts" data-nav-label="ตัวเลขการผลิต">ตัวเลขการผลิต</h3>
+        <span class="sub-note">ค่าคงที่ของสายการผลิต</span>
+      </div>
+
+      <div class="panel-card is-flush">
+        <div class="panel-card-body">
+          <dl class="kv">
+            <dt>ต้นทุนต่อวิดีโอ</dt>
+            <dd>~฿0.30</dd>
+            <dt>เวลาสร้างบท</dt>
+            <dd>~3 วินาทีต่อบท (DeepSeek)</dd>
+            <dt>เสียงพากย์</dt>
+            <dd>Google Chirp3 HD — พร้อมสำหรับ production</dd>
+            <dt>วิดีโอ</dt>
+            <dd>รอ CapCut batch</dd>
+            <dt>ที่จัดเก็บ</dt>
+            <dd>star.panupong.net/content/</dd>
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ 03 · Endpoints ══ -->
+    <section class="doc-section" id="endpoints" aria-labelledby="endpoints-h">
+      <div class="section-head">
+        <h2 id="endpoints-h" data-nav-label="Endpoints">
+          <span class="section-index" aria-hidden="true">03</span>
+          <span>Endpoints</span>
+        </h2>
+        <span class="section-aside">HTTP</span>
+      </div>
+
+      <div class="panel-card is-flush">
+        <div class="endpoint-list">
+          <div class="endpoint">
+            <div class="endpoint-head">
+              <span class="method method-get">GET</span>
+              <span class="endpoint-path">/content/</span>
+              <span class="badge badge-accent">หน้านี้</span>
+            </div>
+            <p class="endpoint-desc">สรุปคลังคอนเทนต์ ตัวเลขสด และเอกสาร API</p>
+          </div>
+
+          <div class="endpoint">
+            <div class="endpoint-head">
+              <span class="method method-get">GET</span>
+              <span class="endpoint-path">/content/registry.db</span>
+              <span class="badge badge-info">SQLite</span>
+            </div>
+            <p class="endpoint-desc">ฐานข้อมูล metadata ของคอนเทนต์ทั้งหมด</p>
+          </div>
+
+          <div class="endpoint">
+            <div class="endpoint-head">
+              <span class="method method-get">GET</span>
+              <span class="endpoint-path">/content/scripts/</span>
+              <span class="badge badge-pending">ไฟล์ข้อความ</span>
+            </div>
+            <p class="endpoint-desc">บทพากย์ทั้งหมดในคลัง หนึ่งไฟล์ต่อหนึ่งบท</p>
+          </div>
+
+          <div class="endpoint">
+            <div class="endpoint-head">
+              <span class="method method-get">GET</span>
+              <span class="endpoint-path">/content/horoscope/</span>
+              <span class="badge badge-pending">JSON</span>
+            </div>
+            <p class="endpoint-desc">ข้อมูลดวงรายวันในรูปแบบ JSON</p>
+          </div>
+
+          <div class="endpoint">
+            <div class="endpoint-head">
+              <span class="method method-get">GET</span>
+              <span class="endpoint-path">/api/health</span>
+              <span class="badge badge-accent">live</span>
+            </div>
+            <p class="endpoint-desc">
+              สถานะรวมและผลตรวจรายรายการ ใช้แสดงผลในหัวข้อ “สถานะบริการ”
+              ตรวจ <code class="inline">cdn/star/manifest.json</code> และสิทธิ์เขียนของ
+              <code class="inline">content/overrides</code>, <code class="inline">content/scripts</code>,
+              <code class="inline">content/backups</code>, <code class="inline">cdn/star</code>
+            </p>
+            <div class="io-grid">
+              <div>
+                <span class="io-label">Response</span>
+                <pre class="code">{
+  "status": "ok",
+  "version": "1.0.0",
+  "checked_at": "2026-08-11T09:00:00Z",
+  "root": "/var/www/star",
+  "checks": {
+    "manifest": { "status": "ok", "detail": "31 days indexed" },
+    "content/overrides": { "status": "ok", "detail": "writable" },
+    "content/scripts": { "status": "ok", "detail": "writable" },
+    "content/backups": { "status": "ok", "detail": "writable" },
+    "cdn/star": { "status": "ok", "detail": "writable" }
   }
-  
-  var sections = document.querySelectorAll('.main h2[id], .main h3[id]');
-  if (sections.length) {
-    var observer = new IntersectionObserver(function(entries) {
-      entries.forEach(function(entry) {
-        if (entry.isIntersecting) {
-          var id = entry.target.id;
-          var links = document.querySelectorAll('.sub-nav a');
-          links.forEach(function(l) { l.classList.remove('active'); });
-          var active = document.querySelector('.sub-nav a[href="#' + id + '"]');
-          if (active) active.classList.add('active');
-        }
-      });
-    }, { rootMargin: '-40% 0px -40% 0px' });
-    sections.forEach(function(sec) { observer.observe(sec); });
-  }
-});
-</script>
+}</pre>
+                <span class="code-note">
+                  ทุก check เป็นอ็อบเจ็กต์ { status, detail } โดย status เป็น ok / warn / fail
+                  ส่วน status รวมเป็น fail ถ้ามี check ใดล้มเหลว และเป็น warn ถ้ามี check ใดเตือน
+                </span>
+              </div>
+            </div>
+            <ul class="status-codes">
+              <li><b>200</b> status เป็น ok หรือ warn</li>
+              <li><b>503</b> status เป็น fail</li>
+            </ul>
+          </div>
 
+          <div class="endpoint">
+            <div class="endpoint-head">
+              <span class="method method-get">GET</span>
+              <span class="endpoint-path">/api/stats</span>
+              <span class="badge badge-accent">live</span>
+            </div>
+            <p class="endpoint-desc">
+              ตัวเลขสรุปของคลัง ใช้เติมตัวเลขในหัวข้อ “ตัวเลขสดจาก API”
+              ทุกค่านับจากไฟล์จริงบนดิสก์ ณ เวลาที่เรียก ไม่มีการแคช
+            </p>
+            <div class="io-grid">
+              <div>
+                <span class="io-label">Response</span>
+                <pre class="code">{
+  "scripts": 434,
+  "days": 31,
+  "audio": 0,
+  "videos": 0,
+  "generated_at": "2026-08-11T09:00:00Z",
+  "dates_total": 31,
+  "dates_complete": 28,
+  "dates_upcoming": 12,
+  "scripts_total": 217,
+  "overrides_total": 4,
+  "published_total": 196,
+  "manifest_days": 31,
+  "manifest_ok": true,
+  "first_date": "2026-08-01",
+  "last_date": "2026-08-31",
+  "next_date": "2026-08-11",
+  "status_counts": { "published": 28, "draft": 3 }
+}</pre>
+                <span class="code-note">
+                  ตัวเลขเป็นเพียงรูปแบบตัวอย่างของ payload — ฟิลด์
+                  scripts / days / audio / videos คงไว้เพื่อความเข้ากันได้กับแดชบอร์ดรุ่นก่อน
+                </span>
+              </div>
+            </div>
+            <ul class="status-codes">
+              <li><b>200</b> สำเร็จเสมอเมื่อบริการทำงานอยู่</li>
+              <li><b>500</b> อ่าน manifest.json ไม่ได้หรือข้อผิดพลาดภายใน</li>
+            </ul>
+          </div>
+
+          <div class="endpoint">
+            <div class="endpoint-head">
+              <span class="method method-get">GET</span>
+              <span class="endpoint-path">/api/manifest</span>
+              <span class="badge badge-info">JSON</span>
+            </div>
+            <p class="endpoint-desc">
+              คืนไฟล์ <code class="inline">cdn/star/manifest.json</code> ตามที่อยู่บนดิสก์
+              ซึ่งเป็นดัชนีรายวันที่หน้าเว็บใช้อ่าน
+            </p>
+            <ul class="status-codes">
+              <li><b>200</b> สำเร็จ</li>
+              <li><b>404</b> ยังไม่มีไฟล์ manifest.json</li>
+              <li><b>500</b> ไฟล์ไม่ใช่ JSON object ที่อ่านได้</li>
+            </ul>
+          </div>
+
+          <div class="endpoint">
+            <div class="endpoint-head">
+              <span class="method method-post">POST</span>
+              <span class="endpoint-path">/api/save-script</span>
+            </div>
+            <p class="endpoint-desc">
+              บันทึกบทที่แก้ไขแล้วของหนึ่งวัน ต้องส่ง <code class="inline">date</code>,
+              <code class="inline">day</code> และ <code class="inline">script</code> ครบทั้งสามฟิลด์
+              เขียนแบบ atomic (temp file + rename + fsync) ลงสามที่พร้อมกัน คือ
+              <code class="inline">content/overrides/&lt;date&gt;/&lt;day&gt;.txt</code>,
+              <code class="inline">content/scripts/claude_&lt;date&gt;_&lt;day&gt;.txt</code> และ
+              <code class="inline">cdn/star/&lt;date&gt;/&lt;day&gt;.txt</code>
+              ถ้ามี override เดิมอยู่ จะสำรองไว้ที่ <code class="inline">content/backups/</code> ก่อนเขียนทับ
+            </p>
+            <div class="io-grid">
+              <div>
+                <span class="io-label">Request</span>
+                <pre class="code">{
+  "date": "2026-08-11",
+  "day": "tue",
+  "script": "ดวงของชาววันอังคาร…"
+}</pre>
+                <span class="code-note">
+                  date ต้องเป็น YYYY-MM-DD ที่มีจริงในปฏิทิน · day ต้องเป็นหนึ่งใน
+                  sun mon tue wed thu fri sat · script ต้องไม่ว่างและไม่เกิน 256 KB
+                </span>
+              </div>
+              <div>
+                <span class="io-label">Response</span>
+                <pre class="code">{
+  "ok": true,
+  "date": "2026-08-11",
+  "day": "tue",
+  "bytes": 1284,
+  "written": [
+    "content/overrides/2026-08-11/tue.txt",
+    "content/scripts/claude_2026-08-11_tue.txt",
+    "cdn/star/2026-08-11/tue.txt"
+  ],
+  "backup": "content/backups/2026-08-11/tue.20260811T090000Z.txt",
+  "saved_at": "2026-08-11T09:00:00Z"
+}</pre>
+                <span class="code-note">backup เป็น null เมื่อยังไม่เคยมี override ของวันนั้น</span>
+              </div>
+            </div>
+            <ul class="status-codes">
+              <li><b>200</b> บันทึกสำเร็จ</li>
+              <li><b>400</b> body ไม่ใช่ JSON object หรือ date / day / script ไม่ถูกต้อง</li>
+              <li><b>403</b> คำขอข้ามต้นทาง (Origin ไม่ตรงกับ Host)</li>
+              <li><b>405</b> ใช้ method อื่นที่ไม่ใช่ POST</li>
+              <li><b>411</b> ไม่ได้ส่ง Content-Length</li>
+              <li><b>413</b> body หรือ script เกิน 256 KB</li>
+              <li><b>500</b> เขียนไฟล์ไม่สำเร็จ</li>
+            </ul>
+          </div>
+
+          <div class="endpoint">
+            <div class="endpoint-head">
+              <span class="method method-post">POST</span>
+              <span class="endpoint-path">/api/regenerate</span>
+            </div>
+            <p class="endpoint-desc">
+              เผยแพร่ซ้ำ (republish) เท่านั้น — คัดลอกไฟล์บทที่มีอยู่แล้วบนดิสก์
+              (override ก่อน ถ้าไม่มีจึงใช้ไฟล์ต้นทางใน <code class="inline">content/scripts/</code>)
+              ไปยัง <code class="inline">cdn/star/&lt;date&gt;/</code> แบบ byte-for-byte
+              <b>ไม่มีการสร้างข้อความใหม่ด้วย AI หรือวิธีใด ๆ</b>
+              วันที่ไม่มีไฟล์ต้นทางจะถูกรายงานกลับ ไม่ถูกเติมให้
+              ส่ง <code class="inline">day</code> เป็นวันเดียว หรือเป็น <code class="inline">"all"</code>
+              (เว้นว่างหรือ null ก็ถือเป็น all) เพื่อทำทั้งเจ็ดวันของวันที่นั้น
+            </p>
+            <div class="io-grid">
+              <div>
+                <span class="io-label">Request</span>
+                <pre class="code">{
+  "date": "2026-08-11",
+  "day": "all"
+}</pre>
+                <span class="code-note">date จำเป็นเสมอ · ถ้าเป็น all ต้องมีไฟล์ต้นทางครบทั้งเจ็ดวัน</span>
+              </div>
+              <div>
+                <span class="io-label">Response</span>
+                <pre class="code">{
+  "ok": true,
+  "date": "2026-08-11",
+  "published": [
+    { "day": "sun", "source": "script" },
+    { "day": "mon", "source": "override" }
+  ],
+  "count": 2,
+  "note": "republished existing script files; no text was generated",
+  "finished_at": "2026-08-11T09:00:00Z"
+}</pre>
+                <span class="code-note">source บอกว่าไฟล์ที่คัดลอกมาจาก override หรือ script ต้นทาง</span>
+              </div>
+            </div>
+            <ul class="status-codes">
+              <li><b>200</b> เผยแพร่ซ้ำสำเร็จ</li>
+              <li><b>400</b> body ไม่ใช่ JSON object หรือ date / day ไม่ถูกต้อง</li>
+              <li><b>404</b> ไม่มีไฟล์บทต้นทางบนดิสก์สำหรับวันที่ที่ขอเลย</li>
+              <li><b>409</b> มีไฟล์ต้นทางไม่ครบ — ไม่เผยแพร่อะไรเลย เพื่อไม่ให้สัปดาห์ไม่สอดคล้องกัน</li>
+              <li><b>500</b> คัดลอกไฟล์ไม่สำเร็จ</li>
+            </ul>
+          </div>
+        </div>
+        <div class="panel-card-foot">
+          <code class="inline">/api</code> ให้บริการอยู่จริงบนโดเมนนี้ ผ่าน nginx ที่ proxy ไปยัง
+          <code class="inline">star_api.py</code> บน <code class="inline">127.0.0.1:9001</code>
+          และยังคงบังคับ Basic Auth เช่นเดียวกับส่วนอื่นของไซต์ —
+          ทุก endpoint ตอบ JSON เสมอ โดยกรณีผิดพลาดจะมีฟิลด์
+          <code class="inline">error</code> และ <code class="inline">status</code>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ 04 · Pipeline ══ -->
+    <section class="doc-section" id="pipeline" aria-labelledby="pipeline-h">
+      <div class="section-head">
+        <h2 id="pipeline-h" data-nav-label="สายการผลิต">
+          <span class="section-index" aria-hidden="true">04</span>
+          <span>สายการผลิต</span>
+        </h2>
+        <span class="section-aside">ขั้นตอน offline → เผยแพร่</span>
+      </div>
+
+      <div class="flow">
+        <div class="flow-step">
+          <span class="step-idx" aria-hidden="true">1</span>
+          <div class="flow-body">
+            <div class="flow-title"><span>คำนวณดวง</span> <code>ขั้นตอน offline</code></div>
+            <p class="flow-desc">Swiss Ephemeris คำนวณตำแหน่งดาวและสร้างข้อมูลดวงของวัน รันนอกเว็บ ไม่มี endpoint</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <span class="step-idx" aria-hidden="true">2</span>
+          <div class="flow-body">
+            <div class="flow-title"><span>เขียนบท</span> <code>ขั้นตอน offline</code></div>
+            <p class="flow-desc">
+              เขียนบทพากย์จากข้อมูลดวงนอกเว็บ แล้ววางไฟล์ไว้ที่
+              <code class="inline">content/scripts/claude_&lt;date&gt;_&lt;day&gt;.txt</code>
+              การแก้ไขภายหลังทำผ่าน <code class="inline">POST /api/save-script</code>
+            </p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <span class="step-idx" aria-hidden="true">3</span>
+          <div class="flow-body">
+            <div class="flow-title"><span>สร้างเสียง</span> <code>ขั้นตอน offline</code></div>
+            <p class="flow-desc">Google Chirp3 HD แปลงบทเป็นเสียงพากย์ ไฟล์ที่ได้เก็บไว้ใต้ <code class="inline">output/</code></p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <span class="step-idx" aria-hidden="true">4</span>
+          <div class="flow-body">
+            <div class="flow-title"><span>ประกอบวิดีโอ</span> <code>แผนงาน</code></div>
+            <p class="flow-desc">CapCut ประกอบภาพ เสียง และซับไตเติลเป็นวิดีโอ ยังรอ batch ยังไม่มีระบบอัตโนมัติ</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <span class="step-idx" aria-hidden="true">5</span>
+          <div class="flow-body">
+            <div class="flow-title"><span>เผยแพร่</span> <code>POST /api/regenerate</code></div>
+            <p class="flow-desc">
+              ขั้นที่มี endpoint จริงคือการเผยแพร่บทขึ้น CDN ด้วย
+              <code class="inline">POST /api/regenerate</code> ซึ่งคัดลอกไฟล์ที่มีอยู่แล้วเท่านั้น
+              ส่วนการส่งขึ้น YouTube, TikTok และ LINE ยังทำนอกระบบนี้
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout callout-info" style="margin-top:1rem">
+        <span class="ms" aria-hidden="true">info</span>
+        <div class="callout-body">
+          <p class="callout-title">สถานะปัจจุบัน</p>
+          <p>บทและเสียงพร้อมสำหรับ production แล้ว ขั้นตอนวิดีโอยังรอ CapCut batch ต้นทุนรวมอยู่ที่ประมาณ ฿0.30 ต่อวิดีโอ</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="toast-region" id="toast-region" role="status" aria-live="polite"></div>
+
+<script src="/workspace.js" defer></script>
 </body>
 </html>

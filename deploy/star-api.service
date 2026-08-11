@@ -1,0 +1,39 @@
+[Unit]
+Description=Star content-ops API (127.0.0.1:9001)
+Documentation=file:///var/www/star/star_api.py
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+# Content and CDN dirs are owned by www-data; the API needs group write there to
+# replace files atomically (write temp + rename inside the target directory).
+SupplementaryGroups=www-data
+WorkingDirectory=/var/www/star
+Environment=PYTHONUNBUFFERED=1
+Environment=STAR_ROOT=/var/www/star
+Environment=STAR_API_PORT=9001
+ExecStart=/usr/bin/python3 /var/www/star/star_api.py
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=10
+
+# The API only ever needs to read and write the project tree.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/var/www/star
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+LockPersonality=yes
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=star-api
+
+[Install]
+WantedBy=multi-user.target

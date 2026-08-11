@@ -174,39 +174,53 @@ function setButtonBusy(btn, busy, busyLabel) {
   btn.setAttribute('aria-busy', String(busy));
 }
 
+// Local calendar date — toISOString() would shift to UTC and can name yesterday.
+function todayStr() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// The API answers JSON, but an error page or empty body must not throw here.
+async function readJson(res) {
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 function setupCreateStar() {
   document.getElementById('create-star-btn').addEventListener('click', async () => {
     const btn = document.getElementById('create-star-btn');
-    setButtonBusy(btn, true, 'กำลังสร้าง…');
+    setButtonBusy(btn, true, 'กำลังเผยแพร่…');
 
     // Trigger shooting star as visual feedback
     triggerShootingStar();
 
-    // Try API first, fallback to demo
     try {
       const res = await fetch('/api/regenerate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date: new Date().toISOString().slice(0,10), template: 'default' })
+        body: JSON.stringify({ date: todayStr(), day: 'all' })
       });
+      const data = await readJson(res);
       if (res.ok) {
-        showToast('เริ่มสร้างคอนเทนต์ของวันนี้แล้ว', 'info');
-        // Poll for completion
-        setTimeout(async () => {
-          await loadManifest();
-          renderCalendar();
-          updateStarCounter();
-          updateStarOfDay();
-          drawConstellation();
-        }, 8000);
+        const n = data && Array.isArray(data.published) ? data.published.length : 0;
+        showToast(n ? `เผยแพร่สคริปต์ที่มีอยู่แล้ว ${n} วัน` : 'เผยแพร่สคริปต์ที่มีอยู่แล้ว', 'success');
+        await loadManifest();
+        renderCalendar();
+        updateStarCounter();
+        updateStarOfDay();
+        drawConstellation();
       } else {
-        showToast('API ยังไม่พร้อมใช้งาน', 'warn');
+        showToast((data && data.error) || 'เผยแพร่ไม่สำเร็จ', 'warn');
       }
     } catch {
       showToast('เชื่อมต่อ API ไม่ได้ — ลองใหม่อีกครั้งภายหลัง', 'error');
+    } finally {
+      setButtonBusy(btn, false);
     }
-
-    setTimeout(() => setButtonBusy(btn, false), 3000);
   });
 }
 
@@ -914,7 +928,7 @@ document.getElementById('save-btn').addEventListener('click', async () => {
     const res = await fetch('/api/save-script', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date: dateStr, script })
+      body: JSON.stringify({ date: dateStr, day: currentDay, script })
     });
     if (res.ok) {
       setStatus(status, 'บันทึกแล้ว', 'success', 'check_circle');
@@ -936,69 +950,39 @@ function resetEdit() {
   document.getElementById('cancel-btn').classList.add('hidden');
 }
 
-// ── Regenerate ──
+// ── Publish to CDN ──
+// The API copies the script that already exists on disk; it never writes text.
 document.getElementById('regen-btn').addEventListener('click', async () => {
   const dateStr = getCurrentDate();
   const status = document.getElementById('regen-status');
-  const confirmed = confirm(`Regenerate content for ${formatDate(dateStr)}?`);
+  const btn = document.getElementById('regen-btn');
+  const confirmed = confirm(`เผยแพร่สคริปต์ที่มีอยู่ของ ${formatDate(dateStr)} ขึ้น CDN อีกครั้ง?`);
   if (!confirmed) return;
 
-  setStatus(status, 'กำลังสร้าง…', 'info', 'progress_activity');
-  document.getElementById('regen-btn').disabled = true;
+  setStatus(status, 'กำลังเผยแพร่…', 'info', 'progress_activity');
+  btn.disabled = true;
 
   try {
     const res = await fetch('/api/regenerate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date: dateStr, template: 'default' })
+      body: JSON.stringify({ date: dateStr, day: currentDay })
     });
-    const data = await res.json();
+    const data = await readJson(res);
     if (res.ok) {
-      setStatus(status, `${data.message || 'เริ่มแล้ว'} — รอสักครู่…`, 'info', 'progress_activity');
-      pollStatus(dateStr);
+      await loadManifest();
+      renderCalendar();
+      showDetail(dateStr);
+      setStatus(document.getElementById('regen-status'), 'เผยแพร่ขึ้น CDN แล้ว', 'success', 'check_circle');
     } else {
-      setStatus(status, data.error || 'สร้างไม่สำเร็จ', 'error', 'error');
-      document.getElementById('regen-btn').disabled = false;
+      setStatus(status, (data && data.error) || 'เผยแพร่ไม่สำเร็จ', 'error', 'error');
     }
   } catch {
-    setStatus(status, 'API ไม่ตอบสนอง — regenerate ยังไม่พร้อมใช้งาน', 'error', 'error');
+    setStatus(status, 'API ไม่ตอบสนอง — เผยแพร่ไม่สำเร็จ', 'error', 'error');
+  } finally {
     document.getElementById('regen-btn').disabled = false;
   }
 });
-
-function pollStatus(dateStr) {
-  let attempts = 0;
-  const max = 30;
-  const interval = setInterval(async () => {
-    attempts++;
-    const status = document.getElementById('regen-status');
-    try {
-      const res = await fetch(`${CDN}/manifest.json`);
-      const m = await res.json();
-      const day = m.days.find(d => d.date === dateStr);
-      if (day && (day.status === 'done' || day.status === 'failed')) {
-        clearInterval(interval);
-        await loadManifest();
-        renderCalendar();
-        showDetail(dateStr);
-        const ok = day.status === 'done';
-        setStatus(status, ok ? 'เสร็จแล้ว' : 'ล้มเหลว', ok ? 'success' : 'error', ok ? 'check_circle' : 'error');
-        document.getElementById('regen-btn').disabled = false;
-      } else if (attempts >= max) {
-        clearInterval(interval);
-        setStatus(status, 'ใช้เวลานานกว่าปกติ — เช็คใหม่ภายหลัง', 'info', 'schedule');
-        document.getElementById('regen-btn').disabled = false;
-      } else {
-        setStatus(status, `กำลังสร้าง… (${attempts * 5}s)`, 'info', 'progress_activity');
-      }
-    } catch {
-      if (attempts >= max) {
-        clearInterval(interval);
-        document.getElementById('regen-btn').disabled = false;
-      }
-    }
-  }, 5000);
-}
 
 // ── Copy Caption ──
 document.getElementById('copy-caption').addEventListener('click', () => {

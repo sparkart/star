@@ -4,3 +4,9 @@ cdn/
 content/scripts/
 content/raw/
 content/horoscope/
+
+# Runtime-generated API state
+__pycache__/
+*.py[cod]
+content/backups/
+content/overrides/
