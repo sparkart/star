@@ -211,6 +211,7 @@ class ClaudeProvider(Provider):
 # ── google cloud text-to-speech ───────────────────────────────────────
 
 SERVICE_ACCOUNT_REQUIRED = ("type", "project_id", "private_key", "client_email")
+GOOGLE_TTS_API_KEY_MAX_LENGTH = 512
 
 
 class GoogleTtsProvider(Provider):
@@ -218,6 +219,8 @@ class GoogleTtsProvider(Provider):
     label = "Google Cloud Text-to-Speech"
     automation = AUTOMATION_FULL
     fields = (
+        {"name": "api_key", "type": "password", "write_only": True, "required": False,
+         "label": "Google Cloud API key"},
         {"name": "service_account_json", "type": "json", "write_only": True, "required": False,
          "label": "Service account JSON"},
         {"name": "credentials_path", "type": "text", "write_only": False, "required": False,
@@ -225,19 +228,36 @@ class GoogleTtsProvider(Provider):
     )
     prerequisites = (
         "A Google Cloud project with the Text-to-Speech API enabled.",
-        "A service-account key with the Cloud Text-to-Speech User role.",
+        "An API key permitted to use Text-to-Speech, or a service-account key "
+        "with the Cloud Text-to-Speech User role.",
     )
-    docs = "gTTS is available as an explicit free fallback and needs no credentials."
+    docs = ("Configure exactly one API key or service-account credential. "
+            "gTTS remains an explicit free fallback and needs no credentials.")
+    VOICES_URL = "https://texttospeech.googleapis.com/v1/voices?languageCode=th-TH"
+    http_get = None  # injectable for tests
 
     def configure(self, payload):
-        raw = payload.get("service_account_json")
-        path = _str_field(payload, "credentials_path", required=False, max_len=512)
-
-        if raw is None and path is None:
+        modes = {
+            "api_key": payload.get("api_key"),
+            "service_account_json": payload.get("service_account_json"),
+            "credentials_path": payload.get("credentials_path"),
+        }
+        selected = [name for name, value in modes.items() if value is not None]
+        if len(selected) != 1:
             raise ProviderError(
-                "provide service_account_json or credentials_path", "service_account_json")
+                "provide exactly one of api_key, service_account_json, or credentials_path")
 
-        if raw is not None:
+        selected_mode = selected[0]
+        if selected_mode == "api_key":
+            api_key = _str_field(payload, "api_key", max_len=GOOGLE_TTS_API_KEY_MAX_LENGTH)
+            # `_str_field` strips strings, so reject a whitespace-only value too.
+            if not api_key:
+                raise ProviderError("api_key must not be empty", "api_key")
+            self.save({"mode": "api_key", "api_key": api_key})
+            return self.status()
+
+        raw = modes["service_account_json"]
+        if selected_mode == "service_account_json":
             if isinstance(raw, str):
                 try:
                     raw = json.loads(raw)
@@ -268,6 +288,9 @@ class GoogleTtsProvider(Provider):
 
         # Path mode: only ever inside the state directory, so this endpoint can
         # never be used to point the service at an arbitrary file on the host.
+        path = _str_field(payload, "credentials_path", max_len=512)
+        if not path:
+            raise ProviderError("credentials_path must not be empty", "credentials_path")
         resolved = os.path.realpath(path)
         allowed_root = os.path.realpath(self.state.path)
         if not (resolved == allowed_root or resolved.startswith(allowed_root + os.sep)):
@@ -297,8 +320,18 @@ class GoogleTtsProvider(Provider):
         stored = self.stored()
         if not stored:
             return self._status(NOT_CONFIGURED,
-                                "no service account stored; gTTS fallback is still available",
+                                "no Google Cloud credential stored; "
+                                "gTTS fallback is still available",
                                 fallback="gTTS (free, lower quality)")
+        if stored.get("mode") == "api_key":
+            schema_error = self._api_key_schema_error(stored)
+            if schema_error:
+                return self._status(ERROR, schema_error, key_mode="api_key")
+            return self._status(
+                READY, "Google Cloud API key stored",
+                key_mode="api_key",
+                masked_hint=star_redact.mask_tail(stored["api_key"]),
+                fallback="gTTS (free, lower quality)")
         path = stored.get("credentials_path")
         if not path or not os.path.isfile(path):
             return self._status(ERROR, "stored credential file is missing")
@@ -315,7 +348,9 @@ class GoogleTtsProvider(Provider):
     def test(self, live=False):
         stored = self.stored()
         if not stored:
-            return self._status(NOT_CONFIGURED, "no service account stored")
+            return self._status(NOT_CONFIGURED, "no Google Cloud credential stored")
+        if stored.get("mode") == "api_key":
+            return self._test_api_key(stored, live)
         path = stored.get("credentials_path")
         data = self.state.read_json(path) if path else None
         if not isinstance(data, dict):
@@ -344,6 +379,64 @@ class GoogleTtsProvider(Provider):
         except Exception as exc:  # noqa: BLE001 - surface a safe summary only
             return self._status(ERROR, "live voice listing failed: %s"
                                 % star_redact.redact_text(str(exc), limit=200), live_test=True)
+
+    @staticmethod
+    def _api_key_schema_error(stored):
+        api_key = stored.get("api_key")
+        if not isinstance(api_key, str):
+            return "stored API key is not a string"
+        if not api_key.strip():
+            return "stored API key is empty"
+        if len(api_key) > GOOGLE_TTS_API_KEY_MAX_LENGTH:
+            return "stored API key exceeds %d characters" % GOOGLE_TTS_API_KEY_MAX_LENGTH
+        return None
+
+    def _test_api_key(self, stored, live):
+        schema_error = self._api_key_schema_error(stored)
+        if schema_error:
+            return self._status(ERROR, schema_error, key_mode="api_key",
+                                live_test=False)
+        api_key = stored["api_key"]
+        if not live:
+            # Schema-only by default. The injectable transport is not touched.
+            return self._status(
+                READY, "API key schema is valid (offline check only)",
+                key_mode="api_key", masked_hint=star_redact.mask_tail(api_key),
+                live_test=False)
+
+        _require_network("google_tts API-key live test")
+        getter = self.http_get or _http_get_json
+        try:
+            # This verification is metadata-only. It never calls synthesis.
+            data = getter(self.VOICES_URL, headers={"X-Goog-Api-Key": api_key})
+            voices = data.get("voices") if isinstance(data, dict) else None
+            if not isinstance(voices, list):
+                raise ValueError("response did not contain a voices list")
+            thai_count = 0
+            for voice in voices:
+                language_codes = voice.get("languageCodes") \
+                    if isinstance(voice, dict) else None
+                if isinstance(language_codes, list) and any(
+                        isinstance(code, str) and code.lower().startswith("th")
+                        for code in language_codes):
+                    thai_count += 1
+            return self._status(
+                READY, "listed %d voices (%d Thai); no speech synthesised"
+                % (len(voices), thai_count),
+                key_mode="api_key", masked_hint=star_redact.mask_tail(api_key),
+                voice_count=len(voices), thai_voice_count=thai_count, live_test=True)
+        except Exception as exc:  # noqa: BLE001 - return only a redacted summary
+            try:
+                error = str(exc)
+            except Exception:  # pragma: no cover - pathological exception object
+                error = exc.__class__.__name__
+            # Generic pattern redaction cannot identify every possible API-key
+            # shape, so remove the exact stored value before handling the text.
+            error = error.replace(api_key, star_redact.MASK)
+            return self._status(
+                ERROR, "live voice listing failed: %s"
+                % star_redact.redact_text(error, limit=200),
+                key_mode="api_key", live_test=True)
 
 
 # ── youtube (OAuth) ───────────────────────────────────────────────────

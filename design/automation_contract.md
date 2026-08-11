@@ -102,7 +102,7 @@ Each pipeline stage must implement a class with:
 |-------|--------------|
 | **astro** | Use existing deterministic Swiss Ephemeris scripts. Output per-day JSON under `content/horoscope` and raw data under `content/raw_astro`. Must produce 7 day entries (one per birth-day) with scores. |
 | **script** | Use Claude CLI with `--print` and `--config-dir`. One script per date/day at `content/scripts/claude_{date}_{day}.txt`. Skip if exists unless `force=true`. Must handle retries, fallback to rule-based generator if API fails, and enforce max 300 chars. |
-| **audio** | Google Cloud TTS (Chirp 3 HD) when configured; gTTS as fallback. Output MP3 under `output/{date}/audio/`. Must accept service_account_json or GOOGLE_APPLICATION_CREDENTIALS path. |
+| **audio** | Google Cloud TTS when configured; gTTS as fallback. Output MP3 under `output/{date}/audio/`. Must accept an API key, service_account_json, or a service-account credentials path. |
 | **video** | FFmpeg only, 1080x1920 MP4. Must use installed Thai font (discovered via safe search). No shell=True. Output under `output/{date}/video/`. |
 | **publish** | Implement real adapters for YouTube, Facebook, LINE, R2. TikTok/Shopee must generate manual handoff package (ZIP with instructions) and never claim published. |
 

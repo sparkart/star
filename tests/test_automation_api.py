@@ -33,6 +33,7 @@ INTENT = {star_api.INTENT_HEADER: star_api.INTENT_VALUE}
 FAKE_TOKEN = "EAAG" + "Zx9Qk4tPl2mNvR7sBd3fH6jU8wY1aC5eT0gI4oL7pS2" + "vX"
 FAKE_SECRET_KEY = "R2secret" + "0123456789abcdef0123456789abcdef"
 FAKE_REFRESH = "1//0gTESTrefreshTOKENvalue123456789"
+FAKE_GOOGLE_API_KEY = "AIzaSyD0-not-a-real-key-7pQ3vW9xL2mN6cB"
 
 
 class AutomationApiTestCase(unittest.TestCase):
@@ -313,6 +314,33 @@ class TestOverviewAndProviders(AutomationApiTestCase):
         self.assertEqual(self.service.state.credential_mode("provider_facebook"), 0o600)
         self.assertEqual(self.service.providers.get("facebook").stored()
                          ["page_access_token"], FAKE_TOKEN)
+
+    def test_google_tts_api_key_is_write_only_across_api_responses(self):
+        status, payload = self.post("/api/providers/configure", {
+            "provider": "google_tts", "api_key": FAKE_GOOGLE_API_KEY})
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["status"], star_providers.READY)
+        self.assertEqual(payload["key_mode"], "api_key")
+        self.assertNotIn(FAKE_GOOGLE_API_KEY, json.dumps(payload))
+
+        _status, listing = self.get("/api/providers")
+        google = next(item for item in listing["providers"]
+                      if item["provider"] == "google_tts")
+        api_field = next(field for field in google["fields"]
+                         if field["name"] == "api_key")
+        self.assertTrue(api_field["write_only"])
+        self.assertFalse(api_field["required"])
+        self.assertEqual(google["key_mode"], "api_key")
+        self.assertNotIn(FAKE_GOOGLE_API_KEY, json.dumps(listing))
+
+        test_status, tested = self.post(
+            "/api/providers/test", {"provider": "google_tts"})
+        self.assertEqual(test_status, 200)
+        self.assertFalse(tested["live_test"])
+        self.assertNotIn(FAKE_GOOGLE_API_KEY, json.dumps(tested))
+
+        self.assertEqual(self.service.providers.get("google_tts").stored(), {
+            "mode": "api_key", "api_key": FAKE_GOOGLE_API_KEY})
 
     def test_r2_secret_never_leaves_the_server(self):
         status, payload = self.post("/api/providers/configure", {

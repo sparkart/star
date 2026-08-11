@@ -765,6 +765,9 @@ class AudioStage(StageAdapter):
 
     name = "audio"
     label = "Voice-over"
+    GOOGLE_SYNTHESIZE_URL = (
+        "https://texttospeech.googleapis.com/v1/text:synthesize")
+    http_post = None  # injectable JSON POST transport for tests
 
     def engine(self, ctx):
         google = ctx.providers.get("google_tts")
@@ -778,7 +781,7 @@ class AudioStage(StageAdapter):
         try:
             import gtts  # noqa: F401
         except ImportError:
-            return ["neither a Google Cloud TTS service account nor the gTTS "
+            return ["neither a Google Cloud TTS credential nor the gTTS "
                     "fallback is available"]
         return []
 
@@ -830,8 +833,17 @@ class AudioStage(StageAdapter):
 
     def _google(self, ctx, text, out_path):
         star_providers._require_network("google tts synthesis")
+        provider = ctx.providers.get("google_tts")
+        stored = provider.stored()
+        if stored.get("mode") == "api_key":
+            api_key = stored.get("api_key")
+            if not isinstance(api_key, str) or not api_key.strip():
+                raise StageFailed("Google Cloud TTS API-key credential is unavailable")
+            self._google_api_key(text, out_path, api_key)
+            return
+
         from google.cloud import texttospeech
-        path = ctx.providers.get("google_tts").credentials_path()
+        path = provider.credentials_path()
         client = texttospeech.TextToSpeechClient.from_service_account_file(path)
         response = client.synthesize_speech(
             input=texttospeech.SynthesisInput(text=text),
@@ -842,6 +854,38 @@ class AudioStage(StageAdapter):
                 audio_encoding=texttospeech.AudioEncoding.MP3))
         with open(out_path, "wb") as fh:
             fh.write(response.audio_content)
+
+    def _google_api_key(self, text, out_path, api_key):
+        payload = {
+            "input": {"text": text},
+            "voice": {"languageCode": "th-TH", "ssmlGender": "FEMALE"},
+            "audioConfig": {"audioEncoding": "MP3"},
+        }
+        headers = {
+            "X-Goog-Api-Key": api_key,
+            "Content-Type": "application/json",
+        }
+        poster = self.http_post or _http_post_json
+        try:
+            response = poster(self.GOOGLE_SYNTHESIZE_URL, payload, headers=headers)
+            encoded = response.get("audioContent") if isinstance(response, dict) else None
+            if not isinstance(encoded, str) or not encoded:
+                raise ValueError("response did not contain audioContent")
+            audio = base64.b64decode(encoded, validate=True)
+            if not audio:
+                raise ValueError("response audioContent decoded to empty audio")
+            with open(out_path, "wb") as fh:
+                fh.write(audio)
+        except Exception as exc:  # noqa: BLE001 - expose only a scrubbed summary
+            try:
+                error = str(exc)
+            except Exception:  # pragma: no cover - pathological exception object
+                error = exc.__class__.__name__
+            error = error.replace(api_key, star_redact.MASK)
+            error = star_redact.redact_text(error, limit=300)
+            raise StageFailed(
+                "Google Cloud TTS API-key synthesis failed: %s" %
+                (error or exc.__class__.__name__)) from None
 
     def _gtts(self, text, out_path):
         star_providers._require_network("gtts synthesis")
@@ -1250,6 +1294,18 @@ def _exchange_code(form, endpoint):
         endpoint, data=data, method="POST",
         headers={"Content-Type": "application/x-www-form-urlencoded"})
     with urllib.request.urlopen(request, timeout=30) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _http_post_json(url, payload, headers=None):
+    """POST a JSON object with urllib and return a decoded JSON object."""
+    star_providers._require_network("HTTP JSON POST")
+    import urllib.request
+    data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    request = urllib.request.Request(
+        url, data=data, headers=headers or {}, method="POST")
+    with urllib.request.urlopen(
+            request, timeout=star_providers.HTTP_TIMEOUT) as response:
         return json.loads(response.read().decode("utf-8"))
 
 

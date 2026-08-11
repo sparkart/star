@@ -7,6 +7,7 @@ STAR_DISABLE_NETWORK=1 set so any accidental provider call raises instead of
 reaching a real API.
 """
 
+import base64
 import json
 import os
 import shutil
@@ -15,7 +16,9 @@ import stat
 import sys
 import tempfile
 import time
+import types
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -27,6 +30,7 @@ import star_state  # noqa: E402
 
 FAKE_TOKEN = "EAAG" + "Zx9Qk4tPl2mNvR7sBd3fH6jU8wY1aC5eT0gI4oL7pS2" + "vX"
 FAKE_REFRESH = "1//0gTESTrefreshTOKENvalue123456789"
+FAKE_GOOGLE_API_KEY = "AIzaSyD0-not-a-real-key-7pQ3vW9xL2mN6cB"
 
 
 class TempEnv(unittest.TestCase):
@@ -550,6 +554,110 @@ class TestProviders(TempEnv):
                                 "google_tts_service_account.json")
         self.assertEqual(stat.S_IMODE(os.stat(key_file).st_mode), 0o600)
 
+    def test_google_tts_api_key_configure_status_and_storage_are_safe(self):
+        provider = self.registry.get("google_tts")
+        api_field = next(field for field in provider.fields
+                         if field["name"] == "api_key")
+        self.assertEqual(api_field["type"], "password")
+        self.assertTrue(api_field["write_only"])
+        self.assertFalse(api_field["required"])
+
+        status = provider.configure({"api_key": FAKE_GOOGLE_API_KEY})
+        self.assertEqual(status["status"], star_providers.READY)
+        self.assertEqual(status["key_mode"], "api_key")
+        self.assertEqual(status["masked_hint"],
+                         star_redact.mask_tail(FAKE_GOOGLE_API_KEY))
+        self.assertNotIn(FAKE_GOOGLE_API_KEY, json.dumps(status))
+        self.assertEqual(provider.stored(), {
+            "mode": "api_key", "api_key": FAKE_GOOGLE_API_KEY})
+        self.assertEqual(self.svc.state.credential_mode("provider_google_tts"), 0o600)
+        service_account_file = os.path.join(
+            self.svc.state.path, "credentials", "google_tts_service_account.json")
+        self.assertFalse(os.path.exists(service_account_file))
+
+        reread = provider.status()
+        self.assertEqual(reread["status"], star_providers.READY)
+        self.assertNotIn(FAKE_GOOGLE_API_KEY, json.dumps(reread))
+
+    def test_google_tts_configure_requires_exactly_one_bounded_mode(self):
+        provider = self.registry.get("google_tts")
+        for payload in ({},
+                        {"api_key": FAKE_GOOGLE_API_KEY,
+                         "service_account_json": {}},
+                        {"api_key": FAKE_GOOGLE_API_KEY,
+                         "credentials_path": "/tmp/not-used"}):
+            with self.assertRaises(star_providers.ProviderError) as ctx:
+                provider.configure(payload)
+            self.assertIn("exactly one", ctx.exception.message)
+
+        for bad_key in ("", "   ", 42,
+                        "x" * (star_providers.GOOGLE_TTS_API_KEY_MAX_LENGTH + 1)):
+            with self.assertRaises(star_providers.ProviderError) as ctx:
+                provider.configure({"api_key": bad_key})
+            self.assertEqual(ctx.exception.field, "api_key")
+
+    def test_google_tts_api_key_offline_test_validates_schema_without_network(self):
+        provider = self.registry.get("google_tts")
+        provider.configure({"api_key": FAKE_GOOGLE_API_KEY})
+        calls = []
+        provider.http_get = lambda *args, **kwargs: calls.append((args, kwargs))
+
+        result = provider.test(live=False)
+        self.assertEqual(result["status"], star_providers.READY)
+        self.assertFalse(result["live_test"])
+        self.assertEqual(result["key_mode"], "api_key")
+        self.assertEqual(calls, [])
+        self.assertNotIn(FAKE_GOOGLE_API_KEY, json.dumps(result))
+
+        self.svc.state.write_credential(
+            "provider_google_tts", {"mode": "api_key", "api_key": "   "})
+        invalid = provider.test(live=False)
+        self.assertEqual(invalid["status"], star_providers.ERROR)
+        self.assertFalse(invalid["live_test"])
+        self.assertEqual(calls, [])
+
+    def test_google_tts_api_key_live_test_lists_thai_voices_with_get_only(self):
+        provider = self.registry.get("google_tts")
+        provider.configure({"api_key": FAKE_GOOGLE_API_KEY})
+        calls = []
+
+        def fake_get(url, headers=None):
+            calls.append((url, headers))
+            return {"voices": [
+                {"name": "th-TH-Standard-A", "languageCodes": ["th-TH"]},
+                {"name": "en-US-Standard-A", "languageCodes": ["en-US"]},
+                {"name": "th-TH-Wavenet-B", "languageCodes": ["th-TH", "th"]},
+            ]}
+
+        provider.http_get = fake_get
+        with mock.patch.dict(os.environ, {"STAR_DISABLE_NETWORK": "0"}):
+            result = provider.test(live=True)
+
+        self.assertEqual(calls, [(provider.VOICES_URL,
+                                  {"X-Goog-Api-Key": FAKE_GOOGLE_API_KEY})])
+        self.assertEqual(result["status"], star_providers.READY)
+        self.assertTrue(result["live_test"])
+        self.assertEqual(result["voice_count"], 3)
+        self.assertEqual(result["thai_voice_count"], 2)
+        self.assertIn("no speech synthesised", result["detail"])
+        self.assertNotIn(FAKE_GOOGLE_API_KEY, json.dumps(result))
+
+    def test_google_tts_api_key_live_error_cannot_echo_the_key(self):
+        provider = self.registry.get("google_tts")
+        provider.configure({"api_key": FAKE_GOOGLE_API_KEY})
+
+        def failing_get(url, headers=None):
+            raise RuntimeError("Google rejected api key " + FAKE_GOOGLE_API_KEY)
+
+        provider.http_get = failing_get
+        with mock.patch.dict(os.environ, {"STAR_DISABLE_NETWORK": "0"}):
+            result = provider.test(live=True)
+
+        self.assertEqual(result["status"], star_providers.ERROR)
+        self.assertTrue(result["live_test"])
+        self.assertNotIn(FAKE_GOOGLE_API_KEY, json.dumps(result))
+        self.assertIn(star_redact.MASK, result["detail"])
+
     def test_google_tts_path_mode_refuses_paths_outside_the_state_dir(self):
         outside = os.path.join(self.root, "key.json")
         with open(outside, "w", encoding="utf-8") as fh:
@@ -594,6 +702,228 @@ class TestProviders(TempEnv):
     def test_registry_reports_every_provider(self):
         keys = [s["provider"] for s in self.registry.statuses()]
         self.assertEqual(keys, list(star_providers.PROVIDER_KEYS))
+
+
+# ── audio synthesis ---------------------------------------------------
+
+class TestAudioStage(TempEnv):
+    def setUp(self):
+        super().setUp()
+        self.svc = self.service()
+        self.provider = self.svc.providers.get("google_tts")
+        self.stage = star_automation.AudioStage()
+
+    def context(self, dry_run=False):
+        job_input = star_jobs.validate_job_input({
+            "from_date": "2026-08-11",
+            "days": ["mon"],
+            "stages": ["audio"],
+            "dry_run": dry_run,
+        })
+        job = self.svc.store.create_job(job_input)
+        return star_automation.JobContext(
+            self.svc, job, self.svc.state.job_dir(job["id"]))
+
+    def write_script(self):
+        path = os.path.join(
+            self.root, "content", "scripts", "claude_2026-08-11_mon.txt")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("เสียงทดสอบภาษาไทย")
+
+    def test_api_key_mode_posts_exact_request_and_writes_mp3(self):
+        self.provider.configure({"api_key": FAKE_GOOGLE_API_KEY})
+        self.write_script()
+        ctx = self.context()
+        mp3 = b"ID3\x04\x00\x00\x00\x00\x00\x08test-mp3"
+        calls = []
+
+        def fake_post(url, payload, headers=None):
+            calls.append((url, payload, headers))
+            return {"audioContent": base64.b64encode(mp3).decode("ascii")}
+
+        self.stage.http_post = fake_post
+        self.assertEqual(self.stage.engine(ctx), "google_tts")
+        with mock.patch.dict(os.environ, {"STAR_DISABLE_NETWORK": "0"}):
+            result = self.stage.execute(ctx)
+
+        self.assertEqual(calls, [(
+            "https://texttospeech.googleapis.com/v1/text:synthesize",
+            {
+                "input": {"text": "เสียงทดสอบภาษาไทย"},
+                "voice": {"languageCode": "th-TH", "ssmlGender": "FEMALE"},
+                "audioConfig": {"audioEncoding": "MP3"},
+            },
+            {
+                "X-Goog-Api-Key": FAKE_GOOGLE_API_KEY,
+                "Content-Type": "application/json",
+            },
+        )])
+        target = os.path.join(self.root, "output", "2026-08-11", "audio", "mon.mp3")
+        with open(target, "rb") as fh:
+            self.assertEqual(fh.read(), mp3)
+        self.assertEqual(result, {"audio_files": 1, "engine": "google_tts"})
+        self.assertNotIn(FAKE_GOOGLE_API_KEY, json.dumps(ctx.artifacts))
+
+    def test_default_transport_is_a_stdlib_json_post_without_network(self):
+        payload = {"input": {"text": "ไทย"}}
+        headers = {
+            "X-Goog-Api-Key": FAKE_GOOGLE_API_KEY,
+            "Content-Type": "application/json",
+        }
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, traceback):
+                return False
+
+            def read(self):
+                return b'{"ok":true}'
+
+        with mock.patch("urllib.request.urlopen", return_value=FakeResponse()) as opener, \
+                mock.patch.dict(os.environ, {"STAR_DISABLE_NETWORK": "0"}):
+            result = star_automation._http_post_json(
+                self.stage.GOOGLE_SYNTHESIZE_URL, payload, headers=headers)
+
+        request = opener.call_args.args[0]
+        request_headers = {
+            name.lower(): value for name, value in request.header_items()}
+        self.assertEqual(request.full_url, self.stage.GOOGLE_SYNTHESIZE_URL)
+        self.assertEqual(request.get_method(), "POST")
+        self.assertEqual(request.data, b'{"input":{"text":"\\u0e44\\u0e17\\u0e22"}}')
+        self.assertEqual(request_headers, {
+            "x-goog-api-key": FAKE_GOOGLE_API_KEY,
+            "content-type": "application/json",
+        })
+        self.assertEqual(opener.call_args.kwargs["timeout"], star_providers.HTTP_TIMEOUT)
+        self.assertEqual(result, {"ok": True})
+
+    def test_service_account_mode_keeps_client_library_path(self):
+        self.provider.configure({"service_account_json": {
+            "type": "service_account",
+            "project_id": "star-proj",
+            "private_key": "-----BEGIN PRIVATE KEY-----\nfake\n-----END PRIVATE KEY-----",
+            "client_email": "tts@star-proj.iam.gserviceaccount.com",
+        }})
+        ctx = self.context()
+        out_path = os.path.join(ctx.stage_dir("audio"), "service-account.mp3")
+        mp3 = b"ID3-service-account"
+        calls = {}
+
+        texttospeech = types.ModuleType("google.cloud.texttospeech")
+
+        class FakeClient:
+            @classmethod
+            def from_service_account_file(cls, path):
+                calls["credentials_path"] = path
+                return cls()
+
+            def synthesize_speech(self, **kwargs):
+                calls["synthesize"] = kwargs
+                return types.SimpleNamespace(audio_content=mp3)
+
+        texttospeech.TextToSpeechClient = FakeClient
+        texttospeech.SynthesisInput = lambda **kw: ("input", kw)
+        texttospeech.VoiceSelectionParams = lambda **kw: ("voice", kw)
+        texttospeech.AudioConfig = lambda **kw: ("config", kw)
+        texttospeech.SsmlVoiceGender = types.SimpleNamespace(FEMALE="FEMALE")
+        texttospeech.AudioEncoding = types.SimpleNamespace(MP3="MP3")
+        google = types.ModuleType("google")
+        cloud = types.ModuleType("google.cloud")
+        google.cloud = cloud
+        cloud.texttospeech = texttospeech
+        modules = {
+            "google": google,
+            "google.cloud": cloud,
+            "google.cloud.texttospeech": texttospeech,
+        }
+        self.stage.http_post = mock.Mock(
+            side_effect=AssertionError("API-key transport must not be used"))
+
+        with mock.patch.dict(sys.modules, modules), \
+                mock.patch.dict(os.environ, {"STAR_DISABLE_NETWORK": "0"}):
+            self.stage._google(ctx, "service account text", out_path)
+
+        self.stage.http_post.assert_not_called()
+        self.assertEqual(calls["credentials_path"], self.provider.credentials_path())
+        self.assertEqual(calls["synthesize"], {
+            "input": ("input", {"text": "service account text"}),
+            "voice": ("voice", {
+                "language_code": "th-TH", "ssml_gender": "FEMALE"}),
+            "audio_config": ("config", {"audio_encoding": "MP3"}),
+        })
+        with open(out_path, "rb") as fh:
+            self.assertEqual(fh.read(), mp3)
+
+    def test_api_key_mode_rejects_malformed_or_empty_audio_safely(self):
+        self.provider.configure({"api_key": FAKE_GOOGLE_API_KEY})
+        ctx = self.context()
+        responses = (
+            None,
+            {},
+            {"audioContent": None},
+            {"audioContent": ""},
+            {"audioContent": "not-valid-base64!"},
+        )
+        for index, response in enumerate(responses):
+            with self.subTest(response=response):
+                out_path = os.path.join(ctx.stage_dir("audio"), "%d.mp3" % index)
+                self.stage.http_post = lambda *args, _response=response, **kwargs: _response
+                with mock.patch.dict(os.environ, {"STAR_DISABLE_NETWORK": "0"}), \
+                        self.assertRaises(star_automation.StageFailed) as caught:
+                    self.stage._google(ctx, "text", out_path)
+                self.assertNotIn(FAKE_GOOGLE_API_KEY, str(caught.exception))
+                self.assertFalse(os.path.exists(out_path))
+
+    def test_api_key_transport_error_is_scrubbed_from_exception_and_job_output(self):
+        self.provider.configure({"api_key": FAKE_GOOGLE_API_KEY})
+
+        def failing_post(url, payload, headers=None):
+            raise RuntimeError("request rejected for " + FAKE_GOOGLE_API_KEY)
+
+        self.stage.http_post = failing_post
+        ctx = self.context()
+        out_path = os.path.join(ctx.stage_dir("audio"), "failed.mp3")
+        with mock.patch.dict(os.environ, {"STAR_DISABLE_NETWORK": "0"}), \
+                self.assertRaises(star_automation.StageFailed) as caught:
+            self.stage._google(ctx, "text", out_path)
+        self.assertNotIn(FAKE_GOOGLE_API_KEY, str(caught.exception))
+        self.assertIn(star_redact.MASK, str(caught.exception))
+        self.assertFalse(os.path.exists(out_path))
+
+        self.write_script()
+        original = star_automation.STAGE_ADAPTERS["audio"]
+        star_automation.STAGE_ADAPTERS["audio"] = self.stage
+        self.addCleanup(star_automation.STAGE_ADAPTERS.__setitem__, "audio", original)
+        job = ctx.job
+        with mock.patch.dict(os.environ, {"STAR_DISABLE_NETWORK": "0"}):
+            done = self.svc.execute_job(job)
+        exposed = json.dumps({
+            "job": done,
+            "events": self.svc.store.list_events(job["id"]),
+        })
+        self.assertEqual(done["status"], "failed")
+        self.assertNotIn(FAKE_GOOGLE_API_KEY, exposed)
+        self.assertIn(star_redact.MASK, done["safe_error"])
+
+    def test_api_key_audio_dry_run_never_synthesizes(self):
+        self.provider.configure({"api_key": FAKE_GOOGLE_API_KEY})
+        calls = []
+        self.stage.http_post = lambda *args, **kwargs: calls.append((args, kwargs))
+        original = star_automation.STAGE_ADAPTERS["audio"]
+        star_automation.STAGE_ADAPTERS["audio"] = self.stage
+        self.addCleanup(star_automation.STAGE_ADAPTERS.__setitem__, "audio", original)
+
+        ctx = self.context(dry_run=True)
+        done = self.svc.execute_job(ctx.job)
+
+        self.assertEqual(done["status"], "succeeded")
+        self.assertEqual(done["result"]["provider_calls_made"], 0)
+        self.assertEqual(calls, [])
+        self.assertNotIn(FAKE_GOOGLE_API_KEY, json.dumps(done))
+        self.assertFalse(os.path.exists(os.path.join(self.root, "output")))
 
 
 # ── pipeline / runner ─────────────────────────────────────────────────
