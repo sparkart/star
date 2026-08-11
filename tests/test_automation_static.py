@@ -101,6 +101,7 @@ class TestNoHardcodedSecrets(unittest.TestCase):
     def test_systemd_unit_provisions_and_allows_the_state_directory(self):
         unit = source_of(os.path.join("deploy", "star-api.service"))
         self.assertIn("Environment=STAR_STATE_DIR=/var/lib/star", unit)
+        self.assertIn("Environment=CLAUDE_CONFIG_DIR=/home/ubuntu/.claude-b", unit)
         self.assertIn("StateDirectory=star", unit)
         self.assertIn("StateDirectoryMode=0700", unit)
         writable = next(line for line in unit.splitlines()

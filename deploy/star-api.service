@@ -15,6 +15,7 @@ Environment=PYTHONUNBUFFERED=1
 Environment=STAR_ROOT=/var/www/star
 Environment=STAR_API_PORT=9001
 Environment=STAR_STATE_DIR=/var/lib/star
+Environment=CLAUDE_CONFIG_DIR=/home/ubuntu/.claude-b
 StateDirectory=star
 StateDirectoryMode=0700
 ExecStart=/usr/bin/python3 /var/www/star/star_api.py
