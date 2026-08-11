@@ -218,6 +218,130 @@ class TestJobValidation(unittest.TestCase):
             with self.assertRaises(star_jobs.JobValidationError):
                 star_jobs.valid_job_id(bad)
 
+    # ── video customisation: overlay text and background image ───────
+    #
+    # Both fields are optional, and a job that mentions neither must come out
+    # exactly as it did before the feature existed. Everything below is about
+    # what reaches the video stage, so a value that survives validation is a
+    # value the renderer will draw.
+
+    def test_customisation_defaults_to_the_untouched_template(self):
+        out = self.valid()
+        self.assertEqual(out["overlay_text_mode"],
+                         star_jobs.DEFAULT_OVERLAY_TEXT_MODE)
+        self.assertEqual(out["overlay_text_mode"], "auto")
+        self.assertIsNone(out["custom_overlay_text"],
+                          "auto mode must carry no text of its own")
+        self.assertIsNone(out["background_asset_id"])
+
+    def test_auto_mode_accepts_an_absent_or_blank_text(self):
+        """Blank is not a custom line, so it is not treated as one."""
+        for value in (None, "", "   ", "\t\n"):
+            out = self.valid(overlay_text_mode="auto", custom_overlay_text=value)
+            self.assertIsNone(out["custom_overlay_text"], repr(value))
+
+    def test_auto_mode_rejects_a_real_custom_text(self):
+        """Text in auto mode is an instruction the renderer would ignore; it is
+        refused rather than silently dropped."""
+        with self.assertRaises(star_jobs.JobValidationError) as ctx:
+            self.valid(overlay_text_mode="auto",
+                       custom_overlay_text="ดวงประจำสัปดาห์นี้")
+        self.assertEqual(ctx.exception.field, "custom_overlay_text")
+
+    def test_custom_mode_requires_a_text(self):
+        for value in (None, "", "   ", "\t\r\n"):
+            with self.assertRaises(star_jobs.JobValidationError) as ctx:
+                self.valid(overlay_text_mode="custom", custom_overlay_text=value)
+            self.assertEqual(ctx.exception.field, "custom_overlay_text", repr(value))
+
+    def test_custom_text_is_trimmed(self):
+        out = self.valid(overlay_text_mode="custom",
+                         custom_overlay_text="  ดวงประจำสัปดาห์นี้  \n")
+        self.assertEqual(out["custom_overlay_text"], "ดวงประจำสัปดาห์นี้")
+        self.assertEqual(out["overlay_text_mode"], "custom")
+
+    def test_custom_text_length_boundary(self):
+        limit = star_jobs.MAX_CUSTOM_OVERLAY_TEXT
+        self.assertEqual(limit, 220)
+        # Exactly at the limit passes, and the surrounding whitespace is not
+        # counted against it: the stored value is what gets measured.
+        out = self.valid(overlay_text_mode="custom",
+                         custom_overlay_text="  " + "ก" * limit + "  ")
+        self.assertEqual(len(out["custom_overlay_text"]), limit)
+        with self.assertRaises(star_jobs.JobValidationError) as ctx:
+            self.valid(overlay_text_mode="custom",
+                       custom_overlay_text="ก" * (limit + 1))
+        self.assertEqual(ctx.exception.field, "custom_overlay_text")
+
+    def test_custom_text_rejects_control_characters(self):
+        """The text is drawn by ffmpeg; a NUL or an escape has no glyph and no
+        business travelling this far. Embedded mid-string so a strip() cannot
+        be what rejects them."""
+        for bad in ("before\x00after", "esc\x1bhere", "del\x7fhere",
+                    "bell\x07here", "vert\x0btab", "c1\x9fhere"):
+            with self.assertRaises(star_jobs.JobValidationError) as ctx:
+                self.valid(overlay_text_mode="custom", custom_overlay_text=bad)
+            self.assertEqual(ctx.exception.field, "custom_overlay_text", repr(bad))
+
+    def test_custom_text_keeps_the_whitespace_a_human_types(self):
+        out = self.valid(overlay_text_mode="custom",
+                         custom_overlay_text="บรรทัดแรก\nบรรทัดสอง\tเว้น")
+        self.assertEqual(out["custom_overlay_text"], "บรรทัดแรก\nบรรทัดสอง\tเว้น")
+
+    def test_custom_text_must_be_a_string(self):
+        for bad in (42, 3.5, True, ["ข้อความ"], {"text": "x"}):
+            with self.assertRaises(star_jobs.JobValidationError) as ctx:
+                self.valid(overlay_text_mode="custom", custom_overlay_text=bad)
+            self.assertEqual(ctx.exception.field, "custom_overlay_text", repr(bad))
+
+    def test_overlay_mode_must_be_a_known_mode(self):
+        for bad in ("AUTO", "Custom", "random", "auto ", "", "manual",
+                    42, True, ["custom"], {"mode": "custom"}):
+            with self.assertRaises(star_jobs.JobValidationError) as ctx:
+                self.valid(overlay_text_mode=bad)
+            self.assertEqual(ctx.exception.field, "overlay_text_mode", repr(bad))
+
+    def test_every_declared_overlay_mode_is_accepted(self):
+        for mode in star_jobs.OVERLAY_TEXT_MODES:
+            text = "ข้อความกลาง" if mode == "custom" else None
+            out = self.valid(overlay_text_mode=mode, custom_overlay_text=text)
+            self.assertEqual(out["overlay_text_mode"], mode)
+
+    def test_background_asset_id_accepts_a_server_minted_id(self):
+        asset_id = "0123456789abcdef" * 2
+        self.assertEqual(len(asset_id), 32)
+        out = self.valid(background_asset_id=asset_id)
+        self.assertEqual(out["background_asset_id"], asset_id)
+
+    def test_background_asset_id_is_optional(self):
+        for value in (None, ""):
+            self.assertIsNone(self.valid(background_asset_id=value)["background_asset_id"])
+
+    def test_background_asset_id_rejects_anything_but_32_lowercase_hex(self):
+        """The id is a lookup key on a server-side path, so nothing that could
+        walk out of the asset directory may pass — including the uppercase form
+        of an otherwise real id."""
+        for bad in ("A" * 32, "0123456789ABCDEF" * 2, "abc", "a" * 31, "a" * 33,
+                    "../../etc/passwd", "a" * 30 + "/x", "a" * 31 + "g",
+                    "  " + "a" * 32, "a" * 32 + "\n", "a" * 16 + "-" + "a" * 15,
+                    42, True, ["a" * 32], {"id": "a" * 32}):
+            with self.assertRaises(star_jobs.JobValidationError) as ctx:
+                self.valid(background_asset_id=bad)
+            self.assertEqual(ctx.exception.field, "background_asset_id", repr(bad))
+
+    def test_customisation_survives_a_full_job_body(self):
+        """The new fields do not disturb the ones that were already there."""
+        asset_id = "f" * 32
+        out = self.valid(days=["mon"], stages=["astro", "video"],
+                         overlay_text_mode="custom",
+                         custom_overlay_text="  ดวงรายสัปดาห์  ",
+                         background_asset_id=asset_id)
+        self.assertEqual(out["days"], ["mon"])
+        self.assertEqual(out["stages"], ["astro", "video"])
+        self.assertEqual(out["custom_overlay_text"], "ดวงรายสัปดาห์")
+        self.assertEqual(out["background_asset_id"], asset_id)
+        self.assertTrue(out["dry_run"])
+
 
 class TestScheduleValidation(unittest.TestCase):
     def test_defaults_are_disabled_and_dry(self):

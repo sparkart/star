@@ -44,6 +44,25 @@ DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 TIME_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 JOB_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 
+# Video customisation, one-off jobs only.
+#
+# "auto" is the default and means the overlay is derived from the script that
+# was actually generated for that date and birth-day; there is no placeholder
+# text anywhere in this system. "custom" means the operator typed one exact
+# line that applies to every clip in the job.
+OVERLAY_TEXT_MODES = ("auto", "custom")
+DEFAULT_OVERLAY_TEXT_MODE = "auto"
+MAX_CUSTOM_OVERLAY_TEXT = 220
+
+# Asset ids are minted by the server (star_assets), never by a caller; the job
+# input carries the id and nothing else — no path, no bytes, no filename.
+ASSET_ID_RE = re.compile(r"^[0-9a-f]{32}$")
+
+# NUL and the C0/C1 control ranges, minus the whitespace a human may type.
+_CONTROL_CHARS = frozenset(
+    chr(code) for code in list(range(0x00, 0x20)) + [0x7F] + list(range(0x80, 0xA0))
+    if chr(code) not in "\t\n\r")
+
 
 class JobValidationError(Exception):
     """Caller-supplied job/schedule input was rejected. Maps to HTTP 400."""
@@ -113,6 +132,62 @@ def _valid_subset(value, allowed, field, allow_all=True, required=True):
     return [item for item in allowed if item in seen]
 
 
+def _valid_overlay(payload):
+    """Normalise the overlay pair into (mode, text-or-None).
+
+    The two fields are validated together because they constrain each other:
+    custom mode without text is unsatisfiable, and text in auto mode is an
+    instruction the renderer would silently ignore. Both are rejected rather
+    than quietly repaired, so what the operator sees on the job is exactly what
+    the video stage will draw.
+    """
+    mode = payload.get("overlay_text_mode")
+    if mode is None:
+        mode = DEFAULT_OVERLAY_TEXT_MODE
+    if not isinstance(mode, str) or mode not in OVERLAY_TEXT_MODES:
+        raise JobValidationError(
+            "overlay_text_mode must be one of: %s" % " ".join(OVERLAY_TEXT_MODES),
+            "overlay_text_mode")
+
+    raw = payload.get("custom_overlay_text")
+    if raw is not None and not isinstance(raw, str):
+        raise JobValidationError("custom_overlay_text must be a string",
+                                 "custom_overlay_text")
+    text = raw.strip() if isinstance(raw, str) else ""
+
+    if mode == "auto":
+        if text:
+            raise JobValidationError(
+                "custom_overlay_text is only accepted when overlay_text_mode "
+                "is \"custom\"; automatic mode takes its text from each clip's "
+                "own generated script", "custom_overlay_text")
+        return mode, None
+
+    if not text:
+        raise JobValidationError(
+            "custom_overlay_text is required when overlay_text_mode is "
+            "\"custom\"", "custom_overlay_text")
+    if any(ch in _CONTROL_CHARS for ch in text):
+        raise JobValidationError(
+            "custom_overlay_text must not contain control characters",
+            "custom_overlay_text")
+    if len(text) > MAX_CUSTOM_OVERLAY_TEXT:
+        raise JobValidationError(
+            "custom_overlay_text exceeds %d characters" % MAX_CUSTOM_OVERLAY_TEXT,
+            "custom_overlay_text")
+    return mode, text
+
+
+def _valid_background_asset_id(value):
+    if value is None or value == "":
+        return None
+    if not isinstance(value, str) or not ASSET_ID_RE.fullmatch(value):
+        raise JobValidationError(
+            "background_asset_id must be 32 lowercase hex characters as "
+            "returned by the upload endpoint", "background_asset_id")
+    return value
+
+
 def validate_job_input(payload):
     """Validate a job creation body and return the normalised input dict.
 
@@ -154,6 +229,9 @@ def validate_job_input(payload):
         if len(note) > 500:
             raise JobValidationError("note exceeds 500 characters", "note")
 
+    overlay_mode, overlay_text = _valid_overlay(payload)
+    background_asset_id = _valid_background_asset_id(payload.get("background_asset_id"))
+
     return {
         "from_date": from_date.isoformat(),
         "to_date": to_date.isoformat(),
@@ -164,6 +242,9 @@ def validate_job_input(payload):
         "dry_run": dry_run,
         "force": force,
         "note": note,
+        "overlay_text_mode": overlay_mode,
+        "custom_overlay_text": overlay_text,
+        "background_asset_id": background_asset_id,
     }
 
 

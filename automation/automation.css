@@ -585,6 +585,161 @@ h5.ac-guide-key { font-size: .78rem; color: var(--text-2); font-weight: 500; }
 .ac-guide-toc-link:hover { background: var(--surface-hover); color: var(--text-2); }
 .ac-guide-toc-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
+/* ── background image picker ───────────────────────────── */
+
+.ac-lede {
+  max-width: 70ch;
+  margin-bottom: .9rem;
+}
+
+/* The dropzone is a surface, not a control: the button inside it is the
+   focusable thing, so keyboard and pointer reach the same file picker. */
+.ac-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .35rem;
+  padding: 1.4rem 1rem;
+  text-align: center;
+  background: var(--surface-2);
+  border: 1px dashed var(--border-mid);
+  border-radius: var(--radius-lg);
+  transition: background-color var(--dur-1) var(--ease-out),
+              border-color var(--dur-1) var(--ease-out);
+}
+/* These three toggle with the hidden attribute, and a display of their own
+   would otherwise win against it. */
+.ac-drop[hidden], .ac-bg-preview[hidden], .ac-overlay-custom[hidden] { display: none; }
+
+.ac-drop-icon { font-size: 26px; color: var(--text-3); }
+.ac-drop-title { font-size: .86rem; font-weight: 500; color: var(--text-2); }
+.ac-drop-hint {
+  font-size: .74rem;
+  color: var(--text-3);
+  line-height: 1.55;
+  max-width: 42ch;
+}
+.ac-drop .btn { margin-top: .4rem; }
+.ac-drop.is-dragover {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  border-style: solid;
+}
+.ac-drop.is-dragover .ac-drop-icon,
+.ac-drop.is-dragover .ac-drop-title { color: var(--accent-strong); }
+.ac-drop.is-locked { opacity: .55; pointer-events: none; }
+
+/* Chosen file: the picture itself, then what it is, then what can be done
+   to it. */
+.ac-bg-preview {
+  display: flex;
+  gap: .9rem;
+  align-items: flex-start;
+  padding: .75rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  min-width: 0;
+}
+.ac-bg-thumb {
+  flex: none;
+  width: 128px;
+  height: 72px;
+  object-fit: cover;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.ac-bg-info { min-width: 0; flex: 1; }
+.ac-bg-name {
+  font-size: .84rem;
+  font-weight: 500;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.ac-bg-meta {
+  margin-top: .15rem;
+  font-size: .74rem;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.ac-bg-note {
+  margin-top: .55rem;
+  max-width: 70ch;
+}
+.ac-bg-note:empty { display: none; }
+
+/* ── overlay text mode ─────────────────────────────────── */
+
+.ac-choices { display: grid; gap: .45rem; }
+
+.ac-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: .55rem;
+  padding: .7rem .8rem;
+  min-width: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background-color var(--dur-1) var(--ease-out),
+              border-color var(--dur-1) var(--ease-out);
+}
+.ac-choice:hover { background: var(--surface-hover); }
+.ac-choice input { margin-top: .2rem; flex: none; accent-color: var(--accent); }
+.ac-choice-body { min-width: 0; }
+.ac-choice-title {
+  display: block;
+  font-size: .84rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.ac-choice-note {
+  display: block;
+  margin-top: .2rem;
+  font-size: .76rem;
+  color: var(--text-3);
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.ac-choice:has(input:checked) {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+}
+.ac-choice input:checked + .ac-choice-body .ac-choice-title { color: var(--accent-strong); }
+.ac-choice:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.ac-overlay-custom { margin-top: .8rem; }
+.ac-overlay-textarea { min-height: 84px; }
+
+/* Hint on the left, counter hard against the right edge, and they stack
+   rather than collide on a narrow screen. */
+.ac-count-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .25rem .75rem;
+  margin-top: .3rem;
+}
+.ac-count-row .ac-field-hint { flex: 1 1 26ch; max-width: 62ch; }
+.ac-count-row strong { color: var(--text-2); font-weight: 600; }
+.ac-counter {
+  flex: none;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: .72rem;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.ac-counter.is-full { color: var(--warn); }
+
+/* ── in-flight submit ──────────────────────────────────── */
+
+.ac-spin { animation: ac-spin 1s linear infinite; }
+@keyframes ac-spin { to { transform: rotate(360deg); } }
+
 /* ── small shared helpers ──────────────────────────────── */
 
 .ac-inline-link {
@@ -629,12 +784,21 @@ h5.ac-guide-key { font-size: .78rem; color: var(--text-2); font-weight: 500; }
 /* Nothing in this section may push the viewport sideways: the log, the
    guide bodies and the provider details all contain unbroken machine
    strings. */
-.ac-tiles, .ac-doors, .ac-jobs, .ac-guide, .ac-run-grid, .ac-schedule-grid {
+.ac-tiles, .ac-doors, .ac-jobs, .ac-guide, .ac-run-grid, .ac-schedule-grid,
+.ac-bg-preview, .ac-choices, .ac-count-row {
   min-width: 0;
 }
 .ac-guide, .ac-guide-section, .ac-provider { max-width: 100%; }
+.ac-bg-thumb, .ac-drop { max-width: 100%; }
 
 @media (max-width: 720px) {
+  /* The thumbnail goes full width above its details rather than squeezing
+     the file name into a column too narrow to read. */
+  .ac-bg-preview { flex-direction: column; }
+  .ac-bg-thumb { width: 100%; height: 148px; }
+  .ac-drop { padding: 1.15rem .8rem; }
+  .ac-drop .btn { width: 100%; justify-content: center; }
+  .ac-counter { order: -1; margin-left: auto; }
   .ac-tiles { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
   .ac-tile-value { font-size: 1.15rem; }
   .ac-run-grid, .ac-schedule-grid { grid-template-columns: 1fr; }
@@ -664,6 +828,10 @@ h5.ac-guide-key { font-size: .78rem; color: var(--text-2); font-weight: 500; }
   .ac-actions { flex-direction: column; align-items: stretch; }
   .ac-actions .btn { width: 100%; justify-content: center; }
   .ac-check-inline { width: 100%; }
+  .ac-drop { padding: 1rem .65rem; }
+  .ac-bg-thumb { height: 120px; }
+  .ac-bg-preview { padding: .6rem; }
+  .ac-choice { padding: .6rem .65rem; }
 }
 
 /* Transitions here are limited to colour and the progress fill; none of them
@@ -672,6 +840,11 @@ h5.ac-guide-key { font-size: .78rem; color: var(--text-2); font-weight: 500; }
   .ac-bar-fill,
   .ac-pill span,
   .ac-nav-link,
+  .ac-drop,
+  .ac-choice,
   .ac-door { transition: none; }
   .ac-nav { scroll-behavior: auto; }
+  /* The submit button still has to read as busy, so the spinner becomes a
+     static glyph rather than disappearing. */
+  .ac-spin { animation: none; }
 }

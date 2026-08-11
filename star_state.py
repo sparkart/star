@@ -77,16 +77,34 @@ class StateDir:
                 raise StateError("cannot secure state directory: %s"
                                  % (exc.strerror or exc.errno))
 
+    def _within_root(self, path):
+        """True if `path` really lives under the state root.
+
+        Checked against realpath on both sides so a pre-existing symlink in the
+        tree cannot turn a chmod of ours into a chmod of something outside it.
+        """
+        root = os.path.realpath(self.path)
+        real = os.path.realpath(path)
+        return real == root or real.startswith(root + os.sep)
+
     def subdir(self, *parts):
         for part in parts:
             _check_name(part)
         path = os.path.join(self.path, *parts)
-        try:
-            os.makedirs(path, mode=DIR_MODE, exist_ok=True)
-        except OSError as exc:
-            raise StateError("cannot create %s: %s" % ("/".join(parts),
-                                                       exc.strerror or exc.errno))
-        self._harden_dir(path)
+        # One level at a time: os.makedirs applies `mode` to the leaf only, so
+        # an intermediate directory ("assets" under assets/backgrounds) would
+        # otherwise be left at 0777 & ~umask. Every component we create or pass
+        # through is hardened, and nothing outside the root is touched.
+        current = self.path
+        for part in parts:
+            current = os.path.join(current, part)
+            try:
+                os.makedirs(current, mode=DIR_MODE, exist_ok=True)
+            except OSError as exc:
+                raise StateError("cannot create %s: %s" % ("/".join(parts),
+                                                           exc.strerror or exc.errno))
+            if self._within_root(current):
+                self._harden_dir(current)
         return path
 
     def job_dir(self, job_id):
@@ -112,6 +130,34 @@ class StateDir:
             os.fchmod(fd, FILE_MODE)
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
                 json.dump(payload, fh, ensure_ascii=False, indent=2, sort_keys=True)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(tmp, path)
+        except BaseException:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+            raise
+        try:
+            os.chmod(path, FILE_MODE)
+        except OSError:
+            pass
+        return path
+
+    def write_bytes(self, path, data):
+        """Atomic 0600 write of raw bytes, same guarantees as write_json.
+
+        Used for operator-supplied binary assets (background images), which is
+        exactly why the temp file is created 0600 before a single byte of it is
+        written: the file is never briefly readable by anyone else.
+        """
+        if not isinstance(data, (bytes, bytearray)):
+            raise StateError("state bytes must be a bytes object")
+        directory = os.path.dirname(path)
+        fd, tmp = tempfile.mkstemp(dir=directory, prefix=".tmp-", suffix=".part")
+        try:
+            os.fchmod(fd, FILE_MODE)
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(data)
                 fh.flush()
                 os.fsync(fh.fileno())
             os.replace(tmp, path)

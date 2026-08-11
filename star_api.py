@@ -509,6 +509,7 @@ MAX_QUERY_VALUE = 2048
 # stdlib-only modules in this repo, so the import is cheap and safe at module
 # load, but a broken optional dependency must never take the whole API down.
 try:
+    import star_assets
     import star_automation
     import star_jobs
     import star_providers
@@ -516,9 +517,32 @@ try:
     from star_state import StateError
     AUTOMATION_IMPORT_ERROR = None
 except Exception as _exc:  # pragma: no cover - only on a broken deployment
-    star_automation = star_jobs = star_providers = star_redact = None
+    star_assets = star_automation = star_jobs = star_providers = star_redact = None
     StateError = OSError
     AUTOMATION_IMPORT_ERROR = repr(_exc)
+
+
+# Routes whose body is bytes rather than JSON. They are read by their own
+# reader, with their own limit: MAX_BODY stays at 256 KiB for every JSON route,
+# because widening it for an image would widen it for the whole control plane.
+RAW_BODY_PATHS = frozenset(("/api/assets/background",))
+MAX_UPLOAD_BODY = (star_assets.MAX_UPLOAD_BYTES if star_assets is not None
+                   else 12 * 1024 * 1024)
+
+
+class RawUpload:
+    """A binary request body plus the type its sender claimed it was.
+
+    The claim is kept separate from the bytes on purpose: a handler has to be
+    able to compare what the caller said against what the file turned out to
+    be, which is impossible once the two are conflated.
+    """
+
+    __slots__ = ("data", "content_type")
+
+    def __init__(self, data, content_type):
+        self.data = data
+        self.content_type = content_type
 
 
 class RequestContext:
@@ -555,6 +579,12 @@ def _translate(exc):
     """Map a domain exception onto the API's error contract."""
     if star_jobs is not None and isinstance(exc, star_jobs.JobValidationError):
         return ApiError(400, exc.message, **({"field": exc.field} if exc.field else {}))
+    if star_assets is not None and isinstance(exc, star_assets.AssetError):
+        # AssetError messages are written to be shown to an operator: they name
+        # the rule that was broken and never a path, a byte or a file name.
+        status = exc.status if isinstance(exc.status, int) and 400 <= exc.status <= 599 else 400
+        return ApiError(status, exc.message,
+                        **({"field": exc.field} if exc.field else {}))
     if star_jobs is not None and isinstance(exc, star_jobs.JobConflict):
         return ApiError(409, exc.message, active_job=exc.active)
     if star_providers is not None and isinstance(exc, star_providers.ProviderError):
@@ -640,11 +670,80 @@ def route_jobs_list(ctx):
     }
 
 
+def _require_background_asset(service, job_input):
+    """A syntactically valid asset id that names nothing is still a bad request.
+
+    Validation in star_jobs can only say the id is 32 hex characters. Whether
+    those characters name an image this server actually holds is a question
+    only the asset store can answer, and it has to be answered before the job
+    is created: a job that references a missing background would sit in the
+    queue only to block at the video stage.
+    """
+    asset_id = job_input.get("background_asset_id")
+    if not asset_id:
+        return job_input
+    if not service.background_exists(asset_id):
+        raise ApiError(400, "no uploaded background image has that id; upload "
+                            "the image again and use the id from that response",
+                       field="background_asset_id")
+    return job_input
+
+
 def route_jobs_create(ctx):
     service = ctx.automation
-    job_input = star_jobs.validate_job_input(_as_object(ctx.body))
+    job_input = _require_background_asset(
+        service, star_jobs.validate_job_input(_as_object(ctx.body)))
     job = service.store.create_job(job_input, origin="manual")
     return 201, _job_view(service, job)
+
+
+def route_asset_background(ctx):
+    """Accept one image as a raw body and return the id the job will carry.
+
+    The body is bytes, not JSON, and it is read by its own reader with its own
+    much larger limit — the JSON limit stays where it is for every other route.
+    Nothing the caller said about those bytes is believed: the declared
+    Content-Type only has to be one of the three we accept, and it is then
+    checked against the type the stored file actually turned out to be, which
+    was decided by magic bytes, ffprobe and a real decode.
+    """
+    upload = ctx.body
+    if not isinstance(upload, RawUpload) or not upload.data:
+        raise ApiError(400, "send the image bytes as the request body")
+
+    declared = upload.content_type
+    if not declared:
+        raise ApiError(415, "Content-Type is required and must be one of: %s"
+                       % ", ".join(star_assets.ACCEPTED_CONTENT_TYPES),
+                       field="content_type")
+    if declared not in star_assets.ACCEPTED_CONTENT_TYPES:
+        raise ApiError(415, "Content-Type must be one of: %s"
+                       % ", ".join(star_assets.ACCEPTED_CONTENT_TYPES),
+                       field="content_type")
+
+    service = ctx.automation
+    meta = service.store_background(upload.data)
+    if meta.get("content_type") != declared:
+        # The header and the file disagree, so the upload is a mistake at best.
+        # The bytes were already validated as an image, but they are not the
+        # image the caller said they were sending, and keeping them would leave
+        # an asset nobody asked for.
+        star_assets.delete_background(service.state, meta["id"])
+        raise ApiError(400, "the file is a %s image but the request declared "
+                            "%s; send the file with its own type"
+                       % (meta.get("content_type"), declared),
+                       field="content_type")
+
+    return 201, {
+        "ok": True,
+        # public_meta is the whole response body on purpose: id, type, size and
+        # dimensions. No path, no file name, nothing that reveals the layout of
+        # the state directory.
+        "asset": star_assets.public_meta(meta),
+        "note": "the image is stored outside the project tree and is never "
+                "served back; a job references it by id only",
+        "uploaded_at": star_jobs.utcnow(),
+    }
 
 
 def route_job_detail(ctx):
@@ -689,11 +788,16 @@ def route_job_retry(ctx):
     overrides = ctx.body if isinstance(ctx.body, dict) else {}
     merged = dict(parent["input"])
     merged.pop("dates", None)
+    # The video customisation travels with the retry: a retried job renders the
+    # same overlay over the same background as the job it repeats, unless the
+    # caller overrides one of them here. The asset id is re-checked below
+    # because retention may have removed the image since the parent ran.
     for key in ("from_date", "to_date", "days", "stages", "platforms", "dry_run",
-                "force", "note"):
+                "force", "note", "overlay_text_mode", "custom_overlay_text",
+                "background_asset_id"):
         if key in overrides:
             merged[key] = overrides[key]
-    job_input = star_jobs.validate_job_input(merged)
+    job_input = _require_background_asset(service, star_jobs.validate_job_input(merged))
     job = service.store.create_job(job_input, parent_id=parent["id"], origin="retry")
     service.store.add_event(job["id"], "info", "manual retry of job %s" % parent["id"])
     return 201, _job_view(service, job)
@@ -762,6 +866,7 @@ AUTOMATION_ROUTES = (
     ("POST", r"/api/providers/test", route_provider_test, True),
     ("GET", r"/api/jobs", route_jobs_list, False),
     ("POST", r"/api/jobs", route_jobs_create, True),
+    ("POST", r"/api/assets/background", route_asset_background, True),
     ("GET", r"/api/jobs/" + HEX32, route_job_detail, False),
     ("POST", r"/api/jobs/" + HEX32 + r"/cancel", route_job_cancel, True),
     ("POST", r"/api/jobs/" + HEX32 + r"/retry", route_job_retry, True),
@@ -927,6 +1032,56 @@ class StarHandler(BaseHTTPRequestHandler):
         except (ValueError, UnicodeDecodeError):
             raise ApiError(400, "request body must be valid UTF-8 JSON")
 
+    def read_binary_body(self, limit=MAX_UPLOAD_BODY):
+        """Read a raw body up to `limit` bytes. Used only by upload routes.
+
+        Deliberately a second reader rather than a flag on read_body: the JSON
+        limit is a security property of every other endpoint and must not
+        become a parameter that an upload route can widen for everyone. The
+        oversize check happens on Content-Length, so an over-limit upload is
+        refused before a single byte of it is read.
+        """
+        keep_alive = self.close_connection
+        self.close_connection = True
+        if self.headers.get("Transfer-Encoding", "").lower().strip() == "chunked":
+            raise ApiError(411, "Content-Length is required")
+        raw_length = self.headers.get("Content-Length")
+        if raw_length is None:
+            raise ApiError(411, "Content-Length is required")
+        try:
+            length = int(raw_length)
+        except ValueError:
+            raise ApiError(400, "invalid Content-Length")
+        if length < 0:
+            raise ApiError(400, "invalid Content-Length")
+        if length > limit:
+            raise ApiError(413, "the upload exceeds the %d MiB limit"
+                           % (limit // (1024 * 1024)))
+        if length == 0:
+            raise ApiError(400, "request body is required")
+        data = self.rfile.read(length)
+        if len(data) != length:
+            raise ApiError(400, "truncated request body")
+        self.close_connection = keep_alive
+        return RawUpload(data, self.declared_content_type())
+
+    def declared_content_type(self):
+        """The bare media type the caller sent, lowercased, parameters dropped."""
+        raw = self.headers.get("Content-Type") or ""
+        return raw.split(";")[0].strip().lower()
+
+    def drop_unread_body(self):
+        """Refuse a request without reading its body, and without desyncing.
+
+        Every guard in the dispatcher answers before the body is read, which on
+        a keep-alive connection would leave the next request to be parsed out
+        of the middle of this one's payload. Draining instead would mean
+        reading up to 12 MiB that a rejected caller chose for us, so the
+        connection is closed: correct for the client, free for the server.
+        """
+        if self.headers.get("Content-Length") or self.headers.get("Transfer-Encoding"):
+            self.close_connection = True
+
     # -- dispatch ---------------------------------------------------
     def dispatch(self, method):
         path = urlsplit(self.path).path
@@ -968,42 +1123,57 @@ class StarHandler(BaseHTTPRequestHandler):
     def dispatch_automation(self, method, path):
         found, allowed = match_automation(method, path)
         if not allowed:
+            self.drop_unread_body()
             if JOB_PATH_RE.match(path):
                 self.send_error_json(404, "unknown job")
                 return
             self.send_error_json(404, "unknown endpoint: %s" % path)
             return
         if method != "OPTIONS" and found is None:
+            self.drop_unread_body()
             self.send_json(405, {"error": "method not allowed", "status": 405,
                                  "allow": sorted(allowed)},
                            {"Allow": ", ".join(sorted(allowed))})
             return
         if not self.same_origin_ok():
+            self.drop_unread_body()
             self.send_error_json(403, "cross-origin request rejected")
             return
         if not self.host_ok():
+            self.drop_unread_body()
             self.send_error_json(403, "host not allowed")
             return
         if method == "OPTIONS":
+            # An OPTIONS carrying a body is malformed rather than dangerous,
+            # but the body is still never read, so the socket cannot be reused.
+            self.drop_unread_body()
             self.send_json(204, {}, {"Allow": ", ".join(sorted(allowed))})
             return
 
         handler, params, requires_intent = found
         if requires_intent and not self.intent_ok():
+            self.drop_unread_body()
             self.send_error_json(
                 403, "missing or wrong %s header" % INTENT_HEADER,
                 required_header={INTENT_HEADER: INTENT_VALUE})
             return
         if AUTOMATION_IMPORT_ERROR is not None:
+            self.drop_unread_body()
             self.send_error_json(503, "automation modules failed to load on this server")
             return
 
         try:
             body = None
             if method in ("POST", "PUT"):
-                # Cancel and retry are intentionally body-optional: an empty
-                # POST is the natural thing for a button to send.
-                body = self.read_body(allow_empty=True)
+                if path in RAW_BODY_PATHS:
+                    # Bytes, not JSON, and read by the upload reader with the
+                    # upload limit. Nothing else on the control plane can reach
+                    # this branch: the set is a literal, not a prefix match.
+                    body = self.read_binary_body()
+                else:
+                    # Cancel and retry are intentionally body-optional: an empty
+                    # POST is the natural thing for a button to send.
+                    body = self.read_body(allow_empty=True)
             ctx = RequestContext(self.server, method, path, params,
                                  self.parse_query(), body,
                                  self.headers.get("Host", ""), self.request_scheme())

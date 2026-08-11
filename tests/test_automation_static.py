@@ -777,5 +777,296 @@ class TestContractSurface(unittest.TestCase):
             py_compile.compile(os.path.join(ROOT, name), doraise=True)
 
 
+class TestVideoCustomisationForm(unittest.TestCase):
+    """The run form's background image and overlay text controls.
+
+    Three things have to stay true together, and only the first is checked by
+    the page-aware tests above: the markup exists, the module talks to the
+    real upload route with the shape that route accepts, and a dry run never
+    puts a byte on the wire.  The copy is checked too, because the whole point
+    of the auto mode is that the operator can tell — from the page, before
+    pressing anything — that each clip gets its own generated script and that
+    a custom string does not.
+    """
+
+    ACCEPTED = ("image/jpeg", "image/png", "image/webp")
+
+    @classmethod
+    def setUpClass(cls):
+        cls.html = source_of(os.path.join("automation", "run", "index.html"))
+        # Attributes wrap across lines in the markup; collapse before matching.
+        cls.flat_html = re.sub(r"\s+", " ", cls.html)
+        cls.js = source_of(os.path.join("automation", "pages-run.js"))
+        cls.core = source_of(SHARED_JS)
+        cls.css = source_of(os.path.join("automation", "automation.css"))
+
+    # helpers ────────────────────────────────────────────────
+
+    def tag_with_id(self, element_id):
+        """The single opening tag carrying `id="…"`, whitespace collapsed."""
+        match = re.search(r'<[a-z]+[^>]*\bid="%s"[^>]*>' % re.escape(element_id),
+                          self.flat_html)
+        self.assertIsNotNone(match, "no element carries id=%r" % element_id)
+        return match.group(0)
+
+    def visible_text(self, fragment):
+        return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", fragment)).strip()
+
+    def flat(self, fragment):
+        return re.sub(r"\s+", " ", fragment)
+
+    def css_block(self, header):
+        """The body of an at-rule, by brace matching from its header."""
+        start = self.css.index(header)
+        open_brace = self.css.index("{", start)
+        depth = 0
+        for index in range(open_brace, len(self.css)):
+            if self.css[index] == "{":
+                depth += 1
+            elif self.css[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    return self.css[open_brace:index + 1]
+        raise AssertionError("unbalanced braces after %r" % header)
+
+    # markup ─────────────────────────────────────────────────
+
+    def test_the_run_page_carries_every_customisation_control(self):
+        for element_id in ("ac-bg-drop", "ac-bg-file", "ac-bg-preview",
+                           "ac-bg-change", "ac-bg-remove", "ac-bg-status",
+                           "ac-overlay-text"):
+            self.assertIn('id="%s"' % element_id, self.html, element_id)
+        # And nowhere else: an upload control on a second page would post to a
+        # route that page cannot then reference in a job.
+        for key, path, _module, _url in PAGES:
+            if key == "run":
+                continue
+            self.assertNotIn('id="ac-bg-file"', source_of(path), path)
+
+    def test_the_file_input_offers_exactly_the_three_accepted_types(self):
+        """Anything wider is an upload the server will refuse after the bytes
+        have already been sent."""
+        import star_assets
+        tag = self.tag_with_id("ac-bg-file")
+        self.assertIn('type="file"', tag)
+        accept = re.search(r'accept="([^"]+)"', tag)
+        self.assertIsNotNone(accept, "the file input declares no accept list")
+        offered = [item.strip() for item in accept.group(1).split(",")]
+        self.assertEqual(offered, list(self.ACCEPTED), accept.group(1))
+        self.assertEqual(tuple(offered), star_assets.ACCEPTED_CONTENT_TYPES,
+                         "the picker and star_assets disagree on the types")
+        for wider in ("image/*", "image/gif", "image/svg+xml", "image/heic", ".jpg"):
+            self.assertNotIn(wider, accept.group(1), wider)
+
+    def test_the_preview_controls_hang_off_the_preview_not_the_dropzone(self):
+        preview = self.flat_html.index('id="ac-bg-preview"')
+        closing = self.flat_html.index("</div> </div>", preview)
+        panel = self.flat_html[preview:closing]
+        for element_id in ("ac-bg-change", "ac-bg-remove"):
+            self.assertIn('id="%s"' % element_id, panel,
+                          "#%s must live inside the preview" % element_id)
+        self.assertIn("hidden", self.tag_with_id("ac-bg-preview"),
+                      "the preview must start hidden, before any file exists")
+        self.assertNotIn(" hidden", self.tag_with_id("ac-bg-drop"))
+
+    def test_the_two_status_regions_are_announced(self):
+        self.assertIn('aria-live="polite"', self.tag_with_id("ac-bg-status"))
+        self.assertIn('role="alert"', self.tag_with_id("ac-bg-error"))
+
+    def test_the_overlay_radios_offer_exactly_the_backend_modes(self):
+        group = re.findall(
+            r'<input[^>]*name="overlay_text_mode"[^>]*>', self.flat_html)
+        values = [re.search(r'value="([a-z]+)"', tag).group(1) for tag in group]
+        self.assertEqual(values, ["auto", "custom"], values)
+        self.assertEqual(tuple(values), star_jobs.OVERLAY_TEXT_MODES,
+                         "the radios and star_jobs disagree on the modes")
+        checked = [tag for tag in group if re.search(r"\bchecked\b", tag)]
+        self.assertEqual(len(checked), 1, "exactly one mode may be preselected")
+        self.assertIn('value="%s"' % star_jobs.DEFAULT_OVERLAY_TEXT_MODE, checked[0])
+
+    def test_the_custom_textarea_stops_where_the_backend_stops(self):
+        tag = self.tag_with_id("ac-overlay-text")
+        limit = re.search(r'maxlength="(\d+)"', tag)
+        self.assertIsNotNone(limit, "the textarea declares no maxlength")
+        self.assertEqual(int(limit.group(1)), 220)
+        self.assertEqual(int(limit.group(1)), star_jobs.MAX_CUSTOM_OVERLAY_TEXT,
+                         "the textarea and star_jobs disagree on the ceiling")
+        # A counter the field points at, and a separate polite live region so
+        # the count is spoken without hijacking the typing.
+        described = re.search(r'aria-describedby="([^"]+)"', tag)
+        self.assertIsNotNone(described)
+        self.assertIn("ac-overlay-count", described.group(1).split())
+        counter = self.flat_html[self.flat_html.index('id="ac-overlay-count"'):]
+        self.assertRegex(counter[:120], r">\s*0\s*/\s*220\s*<",
+                         "the counter must start at 0 / 220")
+        self.assertIn('role="status"', self.tag_with_id("ac-overlay-count-sr"))
+        self.assertIn("hidden", self.tag_with_id("ac-overlay-custom"),
+                      "the custom field must start hidden in auto mode")
+
+    def test_the_page_says_what_each_mode_actually_draws(self):
+        """The distinction this feature exists for, in the operator's words:
+        auto uses each clip's own generated script, custom uses one string for
+        all of them."""
+        auto_at = self.flat_html.index('id="ac-overlay-mode-auto"')
+        custom_at = self.flat_html.index('id="ac-overlay-mode-custom"')
+        self.assertLess(auto_at, custom_at)
+        auto = self.visible_text(self.flat_html[auto_at:custom_at])
+        custom = self.visible_text(
+            self.flat_html[custom_at:self.flat_html.index("</fieldset>", custom_at)])
+
+        self.assertIn("บทที่ระบบสร้างขึ้นจริง", auto,
+                      "auto mode must say it uses the actual generated script")
+        self.assertIn("ไม่ใช่ข้อความ", auto,
+                      "auto mode must say what it is not")
+        self.assertIn("ทุกคลิปในงานนี้", custom,
+                      "custom mode must say it applies to every clip")
+
+        note = self.visible_text(
+            self.flat_html[self.flat_html.index('id="ac-overlay-note"'):
+                           self.flat_html.index("</span>",
+                                                self.flat_html.index('id="ac-overlay-note"'))])
+        self.assertIn("ทุกคลิปในงานนี้", note)
+
+    def test_the_page_says_when_the_image_leaves_the_browser(self):
+        card = self.visible_text(
+            self.flat_html[self.flat_html.index('id="artwork"'):
+                           self.flat_html.index('id="ac-bg-drop"')])
+        self.assertIn("อัปโหลด", card)
+        self.assertIn("เริ่มงานจริง", card,
+                      "the copy must name the live run as the upload trigger")
+        self.assertIn("ทุกคลิปในงานนี้", card)
+        self.assertIn("JPEG", self.html)
+        self.assertIn("WebP", self.html)
+
+    # upload ─────────────────────────────────────────────────
+
+    def test_the_upload_targets_the_registered_route(self):
+        self.assertIn("'/api/assets/background'", self.js)
+        self.assertIn(("POST", "/api/assets/background", True),
+                      [(method, path, intent) for method, path, _h, intent
+                       in star_api.AUTOMATION_ROUTES],
+                      "the page posts to a route the dispatcher does not carry")
+
+    def test_the_raw_upload_sends_the_file_as_the_body(self):
+        upload = self.flat(js_function_body(self.js, "uploadBackground"))
+        self.assertRegex(upload, r"fetch\(\s*(UPLOAD_PATH|'/api/assets/background')",
+                         "the upload must go through fetch on the same path")
+        self.assertIn("method: 'POST'", upload)
+        self.assertRegex(upload, r"body:\s*file\b",
+                         "the body is the file itself, not a wrapper")
+        self.assertRegex(upload, r"'Content-Type':\s*file\.type",
+                         "the server sniffs the declared type; it must be the file's")
+        self.assertNotIn("FormData", upload)
+
+    def test_the_raw_upload_carries_the_same_guards_as_api(self):
+        """It bypasses api(), so every protection api() applies is re-applied."""
+        upload = self.flat(js_function_body(self.js, "uploadBackground"))
+        self.assertRegex(upload, r"headers\[AC\.INTENT_HEADER\]\s*=",
+                         "a state-changing request without the intent header")
+        self.assertIn("credentials: 'same-origin'", upload)
+        self.assertIn("AC.ApiError", upload)
+        # The header the module reads has to be something the core exports.
+        self.assertRegex(self.core, r"INTENT_HEADER\s*:\s*INTENT_HEADER")
+
+    def test_every_preview_url_is_handed_back(self):
+        self.assertIn("URL.createObjectURL", self.js)
+        release = js_function_body(self.js, "releaseSelection")
+        self.assertIn("URL.revokeObjectURL", release,
+                      "clearing a selection must revoke its object URL")
+        self.assertRegex(self.js, r"addEventListener\('pagehide'[\s\S]{0,300}?"
+                                  r"URL\.revokeObjectURL",
+                         "an object URL outlives the document unless released")
+        self.assertGreaterEqual(self.js.count("URL.revokeObjectURL"),
+                                self.js.count("URL.createObjectURL"),
+                                "more object URLs are created than revoked")
+
+    def test_a_stored_asset_id_cannot_outlive_the_file_it_came_from(self):
+        cached = self.flat(js_function_body(self.js, "cachedAssetId"))
+        self.assertRegex(cached, r"assetFile\s*!==\s*\w+\.file",
+                         "the cached id must be checked against the exact File")
+        self.assertIn("return null;", cached)
+        submit = self.flat(js_function_body(self.js, "submitJob"))
+        self.assertRegex(submit, r"assetFile\s*=\s*\w+\.file",
+                         "a successful upload must be cached against its File")
+        self.assertIn("cachedAssetId()", submit,
+                      "a retry must reuse the upload instead of repeating it")
+
+    # payload ────────────────────────────────────────────────
+
+    def test_the_job_body_carries_the_customisation_fields(self):
+        body = self.flat(js_function_body(self.js, "buildBody"))
+        self.assertRegex(body, r"overlay_text_mode:\s*\w+",
+                         "the mode is always sent")
+        self.assertRegex(body, r"if \(\w+ === 'custom'\) \w+\.custom_overlay_text = \w+;",
+                         "custom text is only sent in custom mode")
+        self.assertRegex(body, r"if \(!\w+ && \w+\) \w+\.background_asset_id = \w+;",
+                         "the asset id must be guarded by the dry-run flag")
+        assignments = re.findall(r"\.background_asset_id\s*=", body)
+        self.assertEqual(len(assignments), 1,
+                         "the job body must assign background_asset_id once")
+
+    def test_a_dry_run_uploads_nothing_and_names_no_asset(self):
+        """The explicit branch: with a file chosen and dry run ticked, no
+        request may carry the bytes and no job may reference an id."""
+        submit = self.flat(js_function_body(self.js, "submitJob"))
+        self.assertRegex(submit, r"var \w+ = !\w+ && !!\w+\.file && !\w+\(\);",
+                         "the upload flag must depend on the dry-run flag")
+        self.assertRegex(submit, r"\w+\s*\?\s*uploadBackground\(",
+                         "the upload may only run behind that flag")
+        self.assertRegex(submit, r"Promise\.resolve\(\w+ \? null : \w+\(\)\)",
+                         "a dry run must resolve to no asset id at all")
+        calls = re.findall(r"(?<!function )uploadBackground\(", self.js)
+        self.assertEqual(len(calls), 1, "exactly one call site may upload")
+
+    def test_the_page_repeats_the_dry_run_rule_next_to_the_image(self):
+        note = js_function_body(self.js, "updateBackgroundNote")
+        self.assertIn("$('#ac-dry-run')", note)
+        self.assertIn("ซ้อม", note)
+        self.assertIn("อัปโหลด", note)
+
+    def test_the_module_reads_the_radio_group_the_page_draws(self):
+        """The defect the schedule form once shipped, in its other form: a
+        group read by name that no markup declares."""
+        for name in set(re.findall(r'input\[name="([a-z_]+)"\]', self.js)):
+            self.assertIn('name="%s"' % name, self.html,
+                          "pages-run.js reads %r, which the page never draws" % name)
+        self.assertIn("overlay_text_mode", self.js)
+
+    # styling ────────────────────────────────────────────────
+
+    def test_the_stylesheet_covers_the_new_surfaces(self):
+        for selector in (".ac-drop", ".ac-drop.is-dragover", ".ac-drop.is-locked",
+                         ".ac-bg-preview", ".ac-bg-thumb", ".ac-bg-info",
+                         ".ac-choices", ".ac-choice", ".ac-choice-note",
+                         ".ac-overlay-custom", ".ac-overlay-textarea",
+                         ".ac-counter", ".ac-count-row"):
+            self.assertIn(selector, self.css, selector)
+
+    def test_everything_toggled_by_hidden_is_actually_hidden(self):
+        """The module shows and hides these with the hidden attribute; a
+        display of their own would win against it."""
+        for selector in (".ac-drop[hidden]", ".ac-bg-preview[hidden]",
+                         ".ac-overlay-custom[hidden]"):
+            self.assertIn(selector, self.css, selector)
+            rule = self.css[self.css.index(selector):]
+            self.assertIn("display: none", rule[:rule.index("}")], selector)
+
+    def test_the_new_surfaces_reflow_on_a_phone(self):
+        mobile = self.css_block("@media (max-width: 720px)")
+        for selector in (".ac-bg-preview", ".ac-bg-thumb", ".ac-drop"):
+            self.assertIn(selector, mobile,
+                          "%s is not adapted for a narrow screen" % selector)
+        self.assertIn("flex-direction: column", mobile)
+        # Neither the thumbnail nor the dropzone may push the viewport sideways.
+        self.assertIn(".ac-bg-thumb, .ac-drop { max-width: 100%; }", self.css)
+
+    def test_the_busy_spinner_stops_for_reduced_motion(self):
+        reduced = self.css_block("@media (prefers-reduced-motion: reduce)")
+        self.assertIn(".ac-spin", reduced)
+        self.assertIn("animation: none", reduced)
+        for selector in (".ac-drop", ".ac-choice"):
+            self.assertIn(selector, reduced, selector)
+
+
 if __name__ == "__main__":
     unittest.main()

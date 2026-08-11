@@ -130,7 +130,7 @@
           <span class="section-index" aria-hidden="true">01</span>
           <span>ขอบเขตงาน</span>
         </h2>
-        <span class="section-aside">POST /api/jobs</span>
+        <span class="section-aside">ช่วงวัน · ขั้นตอน · ปลายทาง</span>
       </div>
 
       <div id="ac-run-busy" hidden></div>
@@ -215,8 +215,136 @@
             </label>
           </div>
         </div>
+      </div>
+    </section>
 
-        <div class="panel-card-body is-divided">
+    <section class="doc-section" id="artwork" aria-labelledby="artwork-h">
+      <div class="section-head">
+        <h2 id="artwork-h" data-nav-label="ภาพและข้อความ">
+          <span class="section-index" aria-hidden="true">02</span>
+          <span>ภาพพื้นหลังและข้อความบนวิดีโอ</span>
+        </h2>
+        <span class="section-aside">ไม่บังคับ · ใช้กับทุกคลิปในงานนี้</span>
+      </div>
+
+      <div class="panel-card">
+        <div class="panel-card-head">
+          <h3>ภาพพื้นหลัง</h3>
+          <span class="ac-field-hint">JPEG · PNG · WebP</span>
+        </div>
+        <div class="panel-card-body">
+          <p class="ac-field-hint ac-lede">
+            เว้นว่างไว้ได้ ระบบจะใช้พื้นหลังมาตรฐานของเทมเพลตเดิม
+            ภาพที่เลือกจะถูกอัปโหลดก็ต่อเมื่อกด "เริ่มงานจริง" เท่านั้น
+            และจะถูกใช้เป็นพื้นหลังของทุกคลิปในงานนี้
+          </p>
+
+          <div class="ac-drop" id="ac-bg-drop">
+            <span class="ms ac-drop-icon" aria-hidden="true">add_photo_alternate</span>
+            <p class="ac-drop-title">ลากไฟล์ภาพมาวางตรงนี้</p>
+            <p class="ac-drop-hint" id="ac-bg-rules">
+              รองรับ JPEG, PNG และ WebP ขนาดไม่เกิน 12 MiB ต่อไฟล์
+            </p>
+            <button class="btn btn-sm" type="button" id="ac-bg-pick"
+                    aria-describedby="ac-bg-rules">
+              <span class="ms" aria-hidden="true">upload_file</span>
+              <span>เลือกไฟล์ภาพ</span>
+            </button>
+            <input class="visually-hidden" type="file" id="ac-bg-file"
+                   accept="image/jpeg,image/png,image/webp"
+                   tabindex="-1" aria-hidden="true">
+          </div>
+
+          <div class="ac-bg-preview" id="ac-bg-preview" hidden>
+            <img class="ac-bg-thumb" id="ac-bg-thumb" alt="ตัวอย่างภาพพื้นหลังที่เลือกไว้">
+            <div class="ac-bg-info">
+              <p class="ac-bg-name" id="ac-bg-name"></p>
+              <p class="ac-bg-meta" id="ac-bg-meta"></p>
+              <div class="ac-actions ac-actions-tight">
+                <button class="btn btn-sm" type="button" id="ac-bg-change">
+                  <span class="ms" aria-hidden="true">swap_horiz</span>
+                  <span>เปลี่ยนภาพ</span>
+                </button>
+                <button class="btn btn-sm btn-quiet" type="button" id="ac-bg-remove">
+                  <span class="ms" aria-hidden="true">delete</span>
+                  <span>เอาภาพออก</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <p class="ac-field-error" id="ac-bg-error" role="alert"></p>
+          <p class="status-msg" id="ac-bg-status" aria-live="polite"></p>
+          <p class="ac-field-hint ac-bg-note" id="ac-bg-note"></p>
+        </div>
+      </div>
+
+      <div class="panel-card">
+        <div class="panel-card-head">
+          <h3>ข้อความบนวิดีโอ</h3>
+          <span class="ac-field-hint">อัตโนมัติ หรือกำหนดเอง</span>
+        </div>
+        <div class="panel-card-body">
+
+          <fieldset class="ac-fieldset">
+            <legend id="ac-overlay-legend">ที่มาของข้อความที่จะแสดงบนคลิป</legend>
+            <div class="ac-choices">
+              <label class="ac-choice" for="ac-overlay-mode-auto">
+                <input type="radio" name="overlay_text_mode" id="ac-overlay-mode-auto"
+                       value="auto" checked>
+                <span class="ac-choice-body">
+                  <span class="ac-choice-title">ใช้บทของคลิปนั้นเอง (อัตโนมัติ)</span>
+                  <span class="ac-choice-note">
+                    ทุกวันที่และทุกวันเกิดจะใช้บทที่ระบบสร้างขึ้นจริงของคลิปนั้นเป็นข้อความบนวิดีโอ
+                    ไม่ใช่ข้อความกลาง ๆ ที่เขียนไว้ล่วงหน้า และไม่ใช่ข้อความที่สุ่มขึ้นมา
+                  </span>
+                </span>
+              </label>
+              <label class="ac-choice" for="ac-overlay-mode-custom">
+                <input type="radio" name="overlay_text_mode" id="ac-overlay-mode-custom"
+                       value="custom">
+                <span class="ac-choice-body">
+                  <span class="ac-choice-title">กำหนดข้อความเอง</span>
+                  <span class="ac-choice-note">
+                    พิมพ์ข้อความชุดเดียว แล้วใช้ข้อความนั้นกับทุกคลิปในงานนี้
+                  </span>
+                </span>
+              </label>
+            </div>
+          </fieldset>
+
+          <div class="ac-field ac-overlay-custom" id="ac-overlay-custom" hidden>
+            <label for="ac-overlay-text">ข้อความที่จะแสดงบนทุกคลิป</label>
+            <textarea class="ac-textarea ac-overlay-textarea" id="ac-overlay-text"
+                      maxlength="220" rows="3" spellcheck="false"
+                      placeholder="เช่น ดวงประจำสัปดาห์นี้ · ติดตามทุกวัน"
+                      aria-describedby="ac-overlay-note ac-overlay-count"></textarea>
+            <div class="ac-count-row">
+              <span class="ac-field-hint" id="ac-overlay-note">
+                ข้อความชุดนี้จะถูกใช้กับ<strong>ทุกคลิปในงานนี้</strong>
+                ทุกวันที่และทุกวันเกิดจะเห็นข้อความเดียวกัน
+                ถ้าต้องการให้แต่ละคลิปใช้บทของตัวเอง ให้กลับไปเลือกโหมดอัตโนมัติ
+              </span>
+              <span class="ac-counter" id="ac-overlay-count" aria-hidden="true">0 / 220</span>
+            </div>
+            <span class="visually-hidden" id="ac-overlay-count-sr" role="status"></span>
+            <p class="ac-field-error" id="ac-overlay-error" role="alert"></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="doc-section" id="start" aria-labelledby="start-h">
+      <div class="section-head">
+        <h2 id="start-h" data-nav-label="เริ่มงาน">
+          <span class="section-index" aria-hidden="true">03</span>
+          <span>ตรวจและเริ่มงาน</span>
+        </h2>
+        <span class="section-aside">POST /api/jobs</span>
+      </div>
+
+      <div class="panel-card">
+        <div class="panel-card-body">
           <div class="ac-cost is-dry" id="ac-cost" role="status" aria-live="polite"></div>
           <div class="ac-actions">
             <button class="btn btn-primary" type="button" id="ac-run">
