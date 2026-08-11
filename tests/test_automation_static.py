@@ -64,6 +64,10 @@ FRONTEND_SOURCES = (SHARED_JS, NAV_JS) + PAGE_MODULES + tuple(
 # A misspelling that once shipped as an identifier; it must never come back.
 FORBIDDEN_TERM = "qrg"
 
+# Star Automation owns its own R2 bucket.  The legacy CDN name belongs to a
+# different surface and must never become an Automation upload target again.
+FORBIDDEN_AUTOMATION_R2_NAME = "qrf"
+
 
 def source_of(name):
     with open(os.path.join(ROOT, name), "r", encoding="utf-8") as fh:
@@ -644,6 +648,16 @@ class TestFrontendHygiene(unittest.TestCase):
         for name in FRONTEND_SOURCES + (os.path.join("automation", "automation.css"),):
             self.assertNotIn(FORBIDDEN_TERM, source_of(name).lower(),
                              "%r reappeared in %s" % (FORBIDDEN_TERM, name))
+
+    def test_automation_never_targets_the_legacy_r2_name(self):
+        names = FRONTEND_SOURCES + (
+            os.path.join("automation", "automation.css"),
+            os.path.join("automation", "upload_manifest.py"),
+        )
+        for name in names:
+            self.assertNotIn(FORBIDDEN_AUTOMATION_R2_NAME, source_of(name).lower(),
+                             "%r reappeared in %s"
+                             % (FORBIDDEN_AUTOMATION_R2_NAME, name))
 
     def test_every_request_is_same_origin(self):
         """No page may invent a base URL; paths are relative to this origin."""

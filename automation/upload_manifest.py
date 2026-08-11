@@ -11,7 +11,12 @@ with open('/tmp/manifest_v2.json') as f:
     total = sum(len(d.get('captions', {})) for d in manifest['days'])
     print(f"Total caption sets: {total}")
 
-# Upload via boto3
+# Upload via boto3. Star Automation has its own bucket; never inherit the
+# generic R2 bucket because that credential set may point at another project.
+bucket = os.environ.get('STAR_R2_BUCKET', 'star').strip()
+if bucket != 'star':
+    raise RuntimeError("STAR_R2_BUCKET must be 'star'")
+
 s3 = boto3.client(
     's3',
     endpoint_url=os.environ['R2_ENDPOINT'],
@@ -22,8 +27,8 @@ s3 = boto3.client(
 
 s3.upload_file(
     '/tmp/manifest_v2.json',
-    'qrf',
+    bucket,
     'star/manifest.json',
     ExtraArgs={'ContentType': 'application/json'}
 )
-print("Upload successful!")
+print(f"Upload to bucket {bucket} successful!")
