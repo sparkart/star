@@ -20,15 +20,399 @@
   var STAGE_LABEL = AC.STAGE_LABEL;
   var JOB_STATUS_TH = AC.JOB_STATUS_TH, JOB_STATUS_ICON = AC.JOB_STATUS_ICON;
   var setStatus = AC.setStatus, toast = AC.toast, api = AC.api;
+  var previewReturnFocus = null;
+  var previewAbort = null;
+
+  var DAY_LABEL = {
+    sun: 'อาทิตย์', mon: 'จันทร์', tue: 'อังคาร', wed: 'พุธ',
+    thu: 'พฤหัสบดี', fri: 'ศุกร์', sat: 'เสาร์'
+  };
+  var ARTIFACT_LABEL = {
+    image: 'ภาพ', video: 'วิดีโอ', audio: 'เสียง', text: 'ข้อความ', json: 'ข้อมูล JSON'
+  };
+  var ARTIFACT_ICON = {
+    image: 'image', video: 'movie', audio: 'graphic_eq',
+    text: 'description', json: 'data_object'
+  };
 
   /* ══ Following one job ══════════════════════════════════ */
 
   function followJob(job) {
+    closePreview();
     state.job = job;
     state.lastEventId = 0;
     clear($('#ac-log'));
     renderJob(job);
     schedulePoll(0);
+  }
+
+  /* ══ Generated artifacts ════════════════════════════════ */
+
+  /* The backend mints this exact job-scoped shape. Do not accept a URL merely
+     because URL() says it is same-origin: a different API path is not an
+     artifact capability, and absolute/data/javascript URLs never belong here. */
+  function isSafeArtifactUrl(value, jobId) {
+    if (typeof value !== 'string' || typeof jobId !== 'string' ||
+        !/^[0-9a-f]{32}$/.test(jobId)) return false;
+    var prefix = '/api/jobs/' + jobId + '/artifacts/';
+    if (value.indexOf(prefix) !== 0 ||
+        !/^(0|[1-9][0-9]{0,2})$/.test(value.slice(prefix.length))) return false;
+    try {
+      var parsed = new URL(value, window.location.origin);
+      return parsed.origin === window.location.origin &&
+        parsed.pathname === value && !parsed.search && !parsed.hash;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  function extractArtifacts(job) {
+    var result = job && job.result;
+    if (!result || result.dry_run || !Array.isArray(result.artifacts)) return [];
+    return result.artifacts.filter(function (artifact) {
+      return artifact && ARTIFACT_LABEL[artifact.kind] &&
+        isSafeArtifactUrl(artifact.url, job.id);
+    });
+  }
+
+  function formatBytes(value) {
+    if (typeof value !== 'number' || value < 0 || !isFinite(value)) return '';
+    if (value < 1024) return value + ' ไบต์';
+    if (value < 1024 * 1024) return (value / 1024).toFixed(value < 10240 ? 1 : 0) + ' KB';
+    return (value / (1024 * 1024)).toFixed(value < 10 * 1024 * 1024 ? 1 : 0) + ' MB';
+  }
+
+  function artifactTitle(artifact) {
+    return (typeof artifact.name === 'string' && artifact.name) ||
+      (ARTIFACT_LABEL[artifact.kind] || 'ไฟล์ที่สร้าง');
+  }
+
+  function artifactMeta(artifact) {
+    var parts = [];
+    if (artifact.date) parts.push(artifact.date);
+    if (artifact.day) parts.push('วัน' + (DAY_LABEL[artifact.day] || artifact.day));
+    var size = formatBytes(artifact.bytes);
+    if (size) parts.push(size);
+    return parts.join(' · ') || (artifact.content_type || ARTIFACT_LABEL[artifact.kind]);
+  }
+
+  function mediaFallback(host, artifact) {
+    host.classList.remove('sk', 'is-loading');
+    host.classList.add('is-unavailable');
+    clear(host);
+    host.appendChild(icon('broken_image'));
+    host.appendChild(el('span', null, 'โหลดภาพตัวอย่างไม่ได้'));
+    host.setAttribute('aria-label', 'เปิดตัวอย่าง ' + artifactTitle(artifact));
+  }
+
+  function artifactVisual(artifact, onOpen) {
+    var button = el('button', 'ac-artifact-visual is-' + artifact.kind);
+    button.type = 'button';
+    button.setAttribute('aria-label', 'เปิดตัวอย่าง ' + artifactTitle(artifact));
+    button.addEventListener('click', onOpen);
+
+    if (artifact.kind === 'image') {
+      button.classList.add('sk', 'is-loading');
+      var imageNode = document.createElement('img');
+      imageNode.alt = '';
+      imageNode.loading = 'lazy';
+      imageNode.decoding = 'async';
+      imageNode.src = artifact.url;
+      imageNode.addEventListener('load', function () {
+        button.classList.remove('sk', 'is-loading');
+        button.classList.add('is-ready');
+      });
+      imageNode.addEventListener('error', function () { mediaFallback(button, artifact); });
+      button.appendChild(imageNode);
+      button.appendChild(icon('zoom_in', 'ac-artifact-cue'));
+      return button;
+    }
+
+    if (artifact.kind === 'video') {
+      button.classList.add('sk', 'is-loading');
+      var videoNode = document.createElement('video');
+      videoNode.preload = 'metadata';
+      videoNode.muted = true;
+      videoNode.playsInline = true;
+      videoNode.setAttribute('aria-hidden', 'true');
+      videoNode.src = artifact.url;
+      videoNode.addEventListener('loadeddata', function () {
+        button.classList.remove('sk', 'is-loading');
+        button.classList.add('is-ready');
+      });
+      videoNode.addEventListener('error', function () { mediaFallback(button, artifact); });
+      button.appendChild(videoNode);
+      button.appendChild(icon('play_arrow', 'ac-artifact-cue'));
+      return button;
+    }
+
+    button.classList.add('is-document');
+    button.appendChild(icon(ARTIFACT_ICON[artifact.kind] || 'draft'));
+    button.appendChild(el('span', 'ac-artifact-document-label',
+      artifact.kind === 'json' ? '{ JSON }' : 'TXT'));
+    button.appendChild(icon('visibility', 'ac-artifact-cue'));
+    return button;
+  }
+
+  function artifactCard(artifact) {
+    var card = el('article', 'ac-artifact-card is-' + artifact.kind);
+    var open = function (event) {
+      var trigger = event && event.currentTarget;
+      if (!trigger || typeof trigger.focus !== 'function') trigger = document.activeElement;
+      openPreview(artifact, trigger);
+    };
+
+    if (artifact.kind === 'audio') {
+      var audioWrap = el('div', 'ac-artifact-audio');
+      audioWrap.appendChild(icon(ARTIFACT_ICON.audio));
+      var audioNode = document.createElement('audio');
+      audioNode.controls = true;
+      audioNode.preload = 'metadata';
+      audioNode.src = artifact.url;
+      audioNode.setAttribute('aria-label', 'ฟัง ' + artifactTitle(artifact));
+      audioWrap.appendChild(audioNode);
+      card.appendChild(audioWrap);
+    } else {
+      card.appendChild(artifactVisual(artifact, open));
+    }
+
+    var info = el('div', 'ac-artifact-info');
+    var titleRow = el('div', 'ac-artifact-title-row');
+    titleRow.appendChild(el('h4', 'ac-artifact-title', artifactTitle(artifact)));
+    titleRow.appendChild(el('span', 'chip ac-artifact-kind', ARTIFACT_LABEL[artifact.kind]));
+    info.appendChild(titleRow);
+    info.appendChild(el('p', 'ac-artifact-meta', artifactMeta(artifact)));
+
+    var preview = el('button', 'btn btn-sm btn-quiet ac-artifact-open');
+    preview.type = 'button';
+    preview.appendChild(icon('visibility'));
+    preview.appendChild(el('span', null, 'ดูตัวอย่าง'));
+    preview.setAttribute('aria-label', 'ดูตัวอย่าง ' + artifactTitle(artifact));
+    preview.addEventListener('click', open);
+    info.appendChild(preview);
+    card.appendChild(info);
+
+    /* The quiet area of a card is clickable too; native controls and buttons
+       keep their own behaviour and never trigger the dialog twice. */
+    card.addEventListener('click', function (event) {
+      if (event.target.closest('button, audio, video, a')) return;
+      openPreview(artifact, card.querySelector('.ac-artifact-open'));
+    });
+    return card;
+  }
+
+  function renderArtifacts(host, job) {
+    var artifacts = extractArtifacts(job);
+    var section = el('section', 'ac-artifacts');
+    var head = el('div', 'ac-artifacts-head');
+    head.appendChild(el('h3', null, 'ไฟล์ที่สร้างจากงานนี้'));
+    if (artifacts.length) head.appendChild(el('span', 'chip', artifacts.length + ' ไฟล์'));
+    section.appendChild(head);
+
+    if (!artifacts.length) {
+      var empty = el('div', 'ac-artifact-empty');
+      empty.appendChild(icon('inventory_2'));
+      var copy = el('div');
+      copy.appendChild(el('p', 'ac-artifact-empty-title', 'งานนี้ไม่มีไฟล์ตัวอย่างที่เปิดได้'));
+      copy.appendChild(el('p', 'ac-artifact-empty-desc',
+        'ผลสรุปของแต่ละขั้นตอนยังแสดงอยู่ด้านล่าง หากไฟล์ถูกย้ายหรือลบ ระบบจะไม่สร้างลิงก์ให้'));
+      empty.appendChild(copy);
+      section.appendChild(empty);
+      host.appendChild(section);
+      return;
+    }
+
+    var grid = el('div', 'ac-artifact-grid');
+    artifacts.forEach(function (artifact) { grid.appendChild(artifactCard(artifact)); });
+    section.appendChild(grid);
+    host.appendChild(section);
+  }
+
+  /* ══ Accessible preview dialog ══════════════════════════ */
+
+  function previewFailure(message) {
+    var body = $('#ac-preview-body');
+    clear(body);
+    body.appendChild(AC.callout('error', 'เปิดตัวอย่างไม่ได้', message, 'callout-warn'));
+    body.removeAttribute('aria-busy');
+    toast(message, 'error');
+  }
+
+  function previewText(artifact) {
+    var body = $('#ac-preview-body');
+    body.setAttribute('aria-busy', 'true');
+    var loading = el('div', 'ac-preview-loading');
+    loading.appendChild(el('span', 'sk ac-preview-sk-line'));
+    loading.appendChild(el('span', 'sk ac-preview-sk-line is-short'));
+    loading.appendChild(el('span', 'sk ac-preview-sk-line'));
+    body.appendChild(loading);
+
+    /* The controller is compared by identity below: a preview opened while
+       this fetch is still in flight installs its own controller, and every
+       late callback from the superseded fetch must then leave both the
+       shared abort slot and the dialog body alone. */
+    var controller = new AbortController();
+    previewAbort = controller;
+    fetch(artifact.url, {
+      method: 'GET', cache: 'no-store', credentials: 'same-origin',
+      headers: { Accept: artifact.kind === 'json' ? 'application/json' : 'text/plain' },
+      signal: controller.signal
+    }).then(function (response) {
+      if (!response.ok) throw new Error('เซิร์ฟเวอร์ตอบกลับ HTTP ' + response.status);
+      return response.text();
+    }).then(function (text) {
+      if (previewAbort !== controller) return;
+      if (artifact.kind === 'json') {
+        try { text = JSON.stringify(JSON.parse(text), null, 2); } catch (err) { /* keep source */ }
+      }
+      clear(body);
+      var pre = el('pre', 'ac-preview-text');
+      pre.textContent = text || 'ไฟล์นี้ไม่มีข้อความ';
+      body.appendChild(pre);
+      body.removeAttribute('aria-busy');
+    }).catch(function (err) {
+      if (err && err.name === 'AbortError') return;
+      if (previewAbort !== controller) return;
+      previewFailure('โหลดไฟล์ไม่สำเร็จ ลองปิดแล้วเปิดตัวอย่างอีกครั้ง');
+    }).finally(function () {
+      if (previewAbort === controller) previewAbort = null;
+    });
+  }
+
+  function openPreview(artifact, trigger) {
+    var dialog = $('#ac-preview-dialog');
+    if (!dialog || !state.job || !isSafeArtifactUrl(artifact.url, state.job.id)) {
+      toast('ลิงก์ไฟล์นี้ไม่ผ่านการตรวจสอบ จึงไม่เปิดตัวอย่าง', 'error');
+      return;
+    }
+    if (!ARTIFACT_LABEL[artifact.kind]) {
+      toast('ไฟล์ชนิดนี้ยังไม่มีตัวแสดงตัวอย่าง', 'error');
+      return;
+    }
+    /* Checked before any state or content changes: a browser without native
+       dialog support must not leave a fetch in flight or a focus target set
+       for a dialog that will never open. */
+    if (typeof dialog.showModal !== 'function') {
+      toast('เบราว์เซอร์นี้ไม่รองรับหน้าต่างตัวอย่าง', 'error');
+      return;
+    }
+    if (dialog.open) closePreview();
+    previewReturnFocus = trigger || document.activeElement;
+
+    $('#ac-preview-title').textContent = artifactTitle(artifact);
+    $('#ac-preview-meta').textContent = ARTIFACT_LABEL[artifact.kind] + ' · ' + artifactMeta(artifact);
+    var original = $('#ac-preview-original');
+    original.href = artifact.url;
+    original.setAttribute('aria-label', 'เปิดไฟล์ต้นฉบับ ' + artifactTitle(artifact));
+
+    var body = $('#ac-preview-body');
+    clear(body);
+    body.className = 'ac-preview-body is-' + artifact.kind;
+    body.removeAttribute('aria-busy');
+
+    if (artifact.kind === 'image') {
+      var imageNode = document.createElement('img');
+      imageNode.alt = 'ตัวอย่าง ' + artifactTitle(artifact);
+      imageNode.src = artifact.url;
+      imageNode.addEventListener('error', function () {
+        previewFailure('โหลดภาพไม่สำเร็จ ไฟล์อาจถูกย้ายหรือลบแล้ว');
+      }, { once: true });
+      body.appendChild(imageNode);
+    } else if (artifact.kind === 'video') {
+      var videoNode = document.createElement('video');
+      videoNode.controls = true;
+      videoNode.preload = 'metadata';
+      videoNode.playsInline = true;
+      videoNode.src = artifact.url;
+      videoNode.setAttribute('aria-label', 'ตัวอย่าง ' + artifactTitle(artifact));
+      videoNode.addEventListener('error', function () {
+        previewFailure('โหลดวิดีโอไม่สำเร็จ ไฟล์อาจถูกย้ายหรือลบแล้ว');
+      }, { once: true });
+      body.appendChild(videoNode);
+    } else if (artifact.kind === 'audio') {
+      var audioNode = document.createElement('audio');
+      audioNode.controls = true;
+      audioNode.preload = 'metadata';
+      audioNode.src = artifact.url;
+      audioNode.setAttribute('aria-label', 'ตัวอย่าง ' + artifactTitle(artifact));
+      audioNode.addEventListener('error', function () {
+        previewFailure('โหลดเสียงไม่สำเร็จ ไฟล์อาจถูกย้ายหรือลบแล้ว');
+      }, { once: true });
+      body.appendChild(audioNode);
+    } else {
+      previewText(artifact);
+    }
+
+    dialog.showModal();
+    window.requestAnimationFrame(function () { $('#ac-preview-close').focus(); });
+  }
+
+  function closePreview() {
+    var dialog = $('#ac-preview-dialog');
+    if (!dialog || !dialog.open) return;
+    if (previewAbort) {
+      previewAbort.abort();
+      previewAbort = null;
+    }
+    AC.$$('audio, video', dialog).forEach(function (media) { media.pause(); });
+    dialog.close();
+  }
+
+  function trapPreviewFocus(event) {
+    if (event.key !== 'Tab') return;
+    var dialog = $('#ac-preview-dialog');
+    var focusable = AC.$$('button:not([disabled]), a[href], audio[controls], video[controls], ' +
+      '[tabindex]:not([tabindex="-1"])', dialog).filter(function (node) {
+        return !node.hidden;
+      });
+    if (!focusable.length) {
+      event.preventDefault();
+      dialog.focus();
+      return;
+    }
+    var first = focusable[0], last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  function wirePreviewDialog() {
+    var dialog = $('#ac-preview-dialog');
+    $('#ac-preview-close').addEventListener('click', closePreview);
+    dialog.addEventListener('click', function (event) {
+      if (event.target === dialog) closePreview();
+    });
+    dialog.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closePreview();
+        return;
+      }
+      trapPreviewFocus(event);
+    });
+    dialog.addEventListener('cancel', function (event) {
+      event.preventDefault();
+      closePreview();
+    });
+    dialog.addEventListener('close', function () {
+      /* dialog.close() fires this event from a queued task, so switching
+         straight from one artifact to another reopens the dialog before the
+         superseded lifecycle's close event arrives. Finding the dialog open
+         again marks the event as stale: it owns no cleanup, and must leave
+         the freshly rendered body, href, and focus target alone. */
+      if (dialog.open) return;
+      clear($('#ac-preview-body'));
+      $('#ac-preview-original').removeAttribute('href');
+      var returnTarget = previewReturnFocus;
+      previewReturnFocus = null;
+      if (returnTarget && returnTarget.isConnected) {
+        window.requestAnimationFrame(function () { returnTarget.focus(); });
+      }
+    });
   }
 
   function schedulePoll(delay) {
@@ -171,7 +555,12 @@
       return;
     }
 
-    /* Production result: report exactly what each stage returned. */
+    /* Production result: artifacts lead; raw stage details remain available as
+       the exact audit record beneath them. */
+    renderArtifacts(host, job);
+    if ((result.stages || []).length) {
+      host.appendChild(el('h3', 'ac-result-subhead', 'สรุปผลแต่ละขั้นตอน'));
+    }
     (result.stages || []).forEach(function (stage) {
       var card = el('div', 'panel-card is-flush');
       var head = el('div', 'panel-card-head');
@@ -352,6 +741,7 @@
 
   AC.page('jobs', function () {
     AC.skeleton($('#ac-jobs'), 3, 'ac-sk-row');
+    wirePreviewDialog();
     $('#ac-cancel').addEventListener('click', cancelJob);
     $('#ac-retry').addEventListener('click', retryJob);
     AC.onRefresh(function () {

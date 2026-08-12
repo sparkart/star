@@ -32,11 +32,12 @@ import time
 import urllib.parse
 from datetime import datetime, timedelta, timezone
 
+import star_assets
 import star_jobs
 import star_providers
 import star_redact
 from star_jobs import JobConflict, JobStore, JobValidationError
-from star_state import StateDir, resolve_state_dir
+from star_state import StateDir, StateError, resolve_state_dir
 
 try:  # stdlib since 3.9, but tzdata may be absent on a minimal image
     from zoneinfo import ZoneInfo
@@ -918,6 +919,168 @@ class AudioStage(StageAdapter):
         gTTS(text=text, lang="th").save(out_path)
 
 
+# ── overlay text ──────────────────────────────────────────────────────
+#
+# The line burned into a clip has exactly two possible sources and no third:
+#
+#   auto    the first real hook of the script that was actually generated for
+#           that date and birth-day, read from disk at render time. Empty
+#           lines, hashtag lines and the contract's boilerplate heading are
+#           skipped because none of them is the hook. If the day has no script
+#           text at all the clip does not get a generic caption — the stage
+#           blocks and says why.
+#   custom  the one line the operator typed, already trimmed, length-checked
+#           and stripped of control characters by star_jobs. It is used
+#           verbatim for every clip in the job; nothing here rewrites it.
+#
+# Everything below is pure and deterministic: the same script bytes always
+# produce the same overlay, which is what makes the dry-run preview honest.
+
+OVERLAY_MIN_CHARS = 8
+OVERLAY_MAX_CHARS = 90
+
+# Layout. The safe width is 1080 minus a 96px margin on each side; the glyph
+# ratio is the average advance of the Thai faces in THAI_FONT_CANDIDATES, which
+# is what turns a font size into a wrap width. MAX_LINES is a hard cap, not a
+# working limit: the longest text star_jobs will accept (220 characters) wraps
+# to roughly nine lines at the smallest size, so validated input never reaches
+# it and no operator text is ever silently cut.
+OVERLAY_SAFE_WIDTH = 888
+OVERLAY_GLYPH_RATIO = 0.58
+OVERLAY_MAX_LINES = 20
+
+# Longest text -> smallest type, in fixed steps so the same string always
+# renders at the same size.
+OVERLAY_SIZE_STEPS = ((40, 84), (90, 66), (150, 54))
+OVERLAY_MIN_SIZE = 44
+
+_SENTENCE_END_RE = re.compile(r"[.!?…。！？]+")
+_CONTROL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+
+
+def _heading_fragments():
+    """The literal parts of the contract's caption heading, no second copy."""
+    parts = [part.strip() for part in re.split(r"\{[^}]*\}", PREDICTION_GUIDE_HEADING)]
+    return [part for part in parts if part]
+
+
+def is_boilerplate_heading(line):
+    """True for the dated caption heading every script opens with.
+
+    It is a title, not a hook: it says which day and which date, which the
+    viewer can already see. Recognised from PREDICTION_GUIDE_HEADING itself so
+    a change to the contract cannot leave this behind.
+    """
+    fragments = _heading_fragments()
+    if len(fragments) < 2:
+        return False
+    return line.startswith(fragments[0]) and fragments[1] in line
+
+
+def _clean_overlay_line(raw):
+    """One script line reduced to drawable text: no hashtags, no control bytes."""
+    line = _CONTROL_RE.sub(" ", raw)
+    tokens = [token for token in line.split() if not token.startswith("#")]
+    return " ".join(tokens).strip()
+
+
+def _first_sentence(line):
+    """The opening sentence, when the line runs on past one."""
+    for match in _SENTENCE_END_RE.finditer(line):
+        if match.start() >= OVERLAY_MIN_CHARS:
+            return line[:match.start()].strip()
+    return line
+
+
+def bound_overlay_text(text, limit=OVERLAY_MAX_CHARS):
+    """Cut to `limit` on a word boundary where there is one. Deterministic."""
+    text = text.strip()
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    space = cut.rfind(" ")
+    if space >= limit // 2:
+        cut = cut[:space]
+    return cut.rstrip() + "…"
+
+
+def auto_overlay_text(script):
+    """The clip's own hook, taken from its own script. None when there is none.
+
+    Returning None is a real answer and the caller must treat it as one: there
+    is deliberately no fallback string here, because a caption the script never
+    said would be a claim this system did not make.
+    """
+    for raw in (script or "").splitlines():
+        line = _clean_overlay_line(raw)
+        if not line or len(line) < OVERLAY_MIN_CHARS:
+            continue
+        if is_boilerplate_heading(line):
+            continue
+        return bound_overlay_text(_first_sentence(line))
+    return None
+
+
+def overlay_layout(text):
+    """(font size, wrap width) for one overlay string. Same input, same layout."""
+    length = len(text)
+    size = OVERLAY_MIN_SIZE
+    for limit, step in OVERLAY_SIZE_STEPS:
+        if length <= limit:
+            size = step
+            break
+    width = max(12, int(OVERLAY_SAFE_WIDTH / (OVERLAY_GLYPH_RATIO * size)))
+    return size, width
+
+
+def wrap_overlay_text(text, width, max_lines=OVERLAY_MAX_LINES):
+    """Greedy word wrap, hard-splitting any single run longer than a line."""
+    lines = []
+    current = ""
+    for word in text.split():
+        while len(word) > width:
+            if current:
+                lines.append(current)
+                current = ""
+            lines.append(word[:width])
+            word = word[width:]
+        if not current:
+            current = word
+        elif len(current) + 1 + len(word) <= width:
+            current += " " + word
+        else:
+            lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+    if len(lines) > max_lines:
+        lines = lines[:max_lines]
+        last = lines[-1]
+        lines[-1] = (last[:width - 1].rstrip() if len(last) >= width else last) + "…"
+    return "\n".join(lines)
+
+
+# The size a caller gets when it does not choose one. Every render in this
+# module picks a size from overlay_layout(); this is only the fallback for the
+# literal-title form of build_command, and it is the size that form has always
+# used, so an existing caller's argv does not change.
+DEFAULT_OVERLAY_SIZE = 72
+
+# Symbolic stand-ins used by plan() and nowhere else.
+#
+# A plan is shown in the browser, so it must not contain a path inside the
+# state directory — not the job workdir the overlay file would be staged in,
+# and not the assets directory the uploaded image lives in — nor an absolute
+# path inside the project itself. These tokens keep the planned argv readable
+# and complete while naming nothing an operator could use to locate a file on
+# disk. They are never passed to ffmpeg: plan() builds a description,
+# execute() builds the command that actually runs.
+PLAN_TEXTFILE = "<job-workspace>/video/overlay_%s_%s.txt"
+PLAN_BACKGROUND = "<uploaded-background-image>"
+PLAN_AUDIO = "<project-output>/%s/audio/%s.mp3"
+PLAN_VIDEO = "<project-output>/%s/video/%s.mp4"
+
+
 class VideoStage(StageAdapter):
     """Deterministic 1080x1920 MP4 built by ffmpeg. No shell, ever."""
 
@@ -927,6 +1090,10 @@ class VideoStage(StageAdapter):
     WIDTH, HEIGHT = 1080, 1920
     BACKGROUND = "#0B1220"
     ACCENT = "#E8C36B"
+    # Opacity of the black scrim laid over an uploaded photo. Text legibility
+    # is not negotiable, so the scrim is applied to every image regardless of
+    # how dark the operator's own picture already is.
+    SCRIM = "0.45"
 
     def prerequisites(self, ctx):
         missing = []
@@ -934,28 +1101,139 @@ class VideoStage(StageAdapter):
             missing.append("ffmpeg is not installed on the server")
         if find_thai_font() is None:
             missing.append("no Thai font found (install fonts-noto-core or fonts-thai-tlwg)")
+        asset_id = ctx.input.get("background_asset_id")
+        if asset_id and not star_assets.exists(ctx.state, asset_id):
+            missing.append("the background image this job references is no longer "
+                           "stored on the server; upload it again")
         return missing
 
     def _target(self, ctx, date, day):
         return ctx.project_path("output", date, "video", "%s.mp4" % day)
 
-    def build_command(self, audio_path, out_path, title, font):
-        """The exact ffmpeg argv. Split out so tests can assert it without rendering."""
+    # -- overlay ---------------------------------------------------------
+    def script_text(self, ctx, date, day):
+        """The day's real script: hand-edited override first, then the source."""
+        for rel in (("content", "overrides", date, "%s.txt" % day),
+                    ("content", "scripts", "claude_%s_%s.txt" % (date, day))):
+            path = os.path.join(ctx.root, *rel)
+            if os.path.isfile(path):
+                try:
+                    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+                        return fh.read()
+                except OSError:
+                    return None
+        return None
+
+    def overlay_mode(self, ctx):
+        mode = ctx.input.get("overlay_text_mode")
+        if mode in star_jobs.OVERLAY_TEXT_MODES:
+            return mode
+        return star_jobs.DEFAULT_OVERLAY_TEXT_MODE
+
+    def overlay_text(self, ctx, date, day):
+        """Exactly what this clip will draw, or StageBlocked explaining why not."""
+        if self.overlay_mode(ctx) == "custom":
+            text = (ctx.input.get("custom_overlay_text") or "").strip()
+            if not text:
+                raise StageBlocked("this job asks for custom overlay text but "
+                                   "carries none")
+            return text
+        text = auto_overlay_text(self.script_text(ctx, date, day))
+        if not text:
+            raise StageBlocked(
+                "no script text to caption %s/%s with — the automatic overlay is "
+                "the opening line of that day's own script, and this server does "
+                "not draw a generic caption instead; run the script stage first "
+                "or type a custom line" % (date, day))
+        return text
+
+    def overlay_file(self, ctx, date, day):
+        """Where the drawn text is staged. Inside the job workdir, 0600."""
+        return os.path.join(ctx.workdir, self.name,
+                            "overlay_%s_%s.txt" % (date, day))
+
+    def _write_overlay(self, ctx, date, day, text, width):
+        """Hand the text to ffmpeg as a file, never as a filter argument.
+
+        drawtext's `text=` value is parsed by the filter's own mini-syntax, so
+        a colon or a backslash in an operator's line would change the filter
+        rather than the caption. `textfile=` is read as bytes and cannot, which
+        is why the escaping below only ever applies to paths we chose.
+        """
+        ctx.stage_dir(self.name)
+        path = self.overlay_file(ctx, date, day)
+        ctx.state.write_bytes(path, wrap_overlay_text(text, width).encode("utf-8"))
+        return path
+
+    # -- background ------------------------------------------------------
+    def background_path(self, ctx):
+        """The uploaded image for this job, or None. Never a caller's path."""
+        asset_id = ctx.input.get("background_asset_id")
+        if not asset_id:
+            return None
+        path = star_assets.background_path(ctx.state, asset_id)
+        if path is None:
+            raise StageBlocked("the background image this job references is no "
+                               "longer stored on the server; upload it again and "
+                               "start a new job")
+        return path
+
+    def build_command(self, audio_path, out_path, title=None, font=None,
+                      fontsize=DEFAULT_OVERLAY_SIZE, background=None,
+                      textfile=None):
+        """The exact ffmpeg argv. Split out so tests can assert it without rendering.
+
+        argv only: every value below is either a constant, a path this module
+        chose, or a number — nothing here is ever handed to a shell.
+
+        The caption can arrive two ways and the pipeline only ever uses one of
+        them. `textfile` is a path ffmpeg reads as raw bytes, and it is what
+        every render in this module passes, because operator text put into
+        `text=` would be parsed by drawtext's own mini-syntax rather than drawn.
+        `title` is the older literal-caption form, escaped into the filter and
+        kept for callers that have a string and no file to point at; it is
+        never how job text reaches ffmpeg. Passing both is a programming error.
+        """
+        if textfile is not None and title is not None:
+            raise ValueError("pass either a title or a textfile, not both")
+        if textfile is None and title is None:
+            raise ValueError("the overlay needs either a title or a textfile")
+        caption = ("textfile=%s" % _ffmpeg_escape(textfile) if textfile is not None
+                   else "text=%s" % _ffmpeg_escape(title))
         drawtext = ":".join([
-            "fontfile=%s" % font,
-            "text=%s" % _ffmpeg_escape(title),
+            "fontfile=%s" % _ffmpeg_escape(font or ""),
+            caption,
             "fontcolor=%s" % self.ACCENT,
-            "fontsize=72",
+            "fontsize=%d" % fontsize,
+            "line_spacing=%d" % max(8, fontsize // 5),
+            "borderw=3",
+            "bordercolor=black@0.85",
             "x=(w-text_w)/2",
             "y=(h-text_h)/2",
-            "line_spacing=18",
         ])
+        if background:
+            # Cover, then crop: the photo fills 1080x1920 with its aspect ratio
+            # intact and the overflow trimmed, so nothing is ever stretched.
+            # The scrim goes under the text and over the picture.
+            source = ["-loop", "1", "-framerate", "30", "-i", background]
+            video_filter = ",".join([
+                "scale=%d:%d:force_original_aspect_ratio=increase"
+                % (self.WIDTH, self.HEIGHT),
+                "crop=%d:%d" % (self.WIDTH, self.HEIGHT),
+                "setsar=1",
+                "drawbox=x=0:y=0:w=iw:h=ih:color=black@%s:t=fill" % self.SCRIM,
+                "drawtext=" + drawtext,
+            ])
+        else:
+            source = ["-f", "lavfi", "-i", "color=c=%s:s=%dx%d:r=30"
+                      % (self.BACKGROUND, self.WIDTH, self.HEIGHT)]
+            video_filter = "drawtext=" + drawtext
         return [
             "ffmpeg", "-hide_banner", "-nostdin", "-y",
-            "-f", "lavfi", "-i", "color=c=%s:s=%dx%d:r=30" % (
-                self.BACKGROUND, self.WIDTH, self.HEIGHT),
+        ] + source + [
             "-i", audio_path,
-            "-vf", "drawtext=" + drawtext,
+            "-map", "0:v:0", "-map", "1:a:0",
+            "-vf", video_filter,
             "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-b:a", "128k",
             "-shortest", "-movflags", "+faststart",
@@ -963,22 +1241,81 @@ class VideoStage(StageAdapter):
         ]
 
     def plan(self, ctx):
+        """Describe the render. Writes nothing: no text file, no asset, no dir.
+
+        A dry run is a preview, so every clip gets the ffmpeg argv it would be
+        rendered with — including the clips whose overlay text does not exist
+        yet. That is not a promise the render would succeed: where the text is
+        missing the description says so in the operator's own terms, and the
+        argv carries a symbolic textfile rather than an invented caption. The
+        real execute() still refuses to run that clip.
+
+        Nothing here touches disk beyond the read-only existence check the
+        background needs, and no absolute path reaches the plan: the overlay
+        file, the uploaded image, the audio input and the .mp4 output all
+        appear as tokens. The entry's `output` field still carries the real
+        project-relative path, which is what the operator needs to find the
+        clip afterwards.
+        """
         font = find_thai_font()
-        ctx.plan("render %dx%d MP4 with font %s" % (self.WIDTH, self.HEIGHT, font or "<missing>"))
+        mode = self.overlay_mode(ctx)
+        asset_id = ctx.input.get("background_asset_id")
+        has_background = bool(asset_id) and star_assets.exists(ctx.state, asset_id)
+        ctx.plan("render %dx%d MP4 with font %s"
+                 % (self.WIDTH, self.HEIGHT, font or "<missing>"))
+        if asset_id:
+            if has_background:
+                ctx.plan("composite the uploaded background image behind the text: "
+                         "scaled to cover %dx%d, centre-cropped, darkened by a "
+                         "black@%s scrim" % (self.WIDTH, self.HEIGHT, self.SCRIM))
+            else:
+                ctx.plan("the background image this job references is no longer "
+                         "stored on the server, so the render would block")
+        else:
+            ctx.plan("solid %s background; no image was uploaded with this job"
+                     % self.BACKGROUND)
+        if mode == "custom":
+            ctx.plan("overlay text: the operator's custom line, used unchanged on "
+                     "every clip in this job")
+        else:
+            ctx.plan("overlay text: taken from each date and birth-day's own "
+                     "script (hand-edited override first, then the generated "
+                     "script); no placeholder is ever drawn")
+
         for date in ctx.dates:
             for day in ctx.days:
-                audio = os.path.join(ctx.root, "output", date, "audio", "%s.mp3" % day)
-                ctx.plan("render %s/%s" % (date, day),
-                         command=self.build_command(audio, self._target(ctx, date, day),
-                                                    "ดวงของชาววัน" + DAY_TH.get(day, day),
-                                                    font or "<missing>"),
-                         output=os.path.relpath(self._target(ctx, date, day), ctx.root))
+                # `target` is only ever used for the operator-facing `output`
+                # field, which is project-relative. The argv gets the tokens.
+                target = self._target(ctx, date, day)
+                audio_token = PLAN_AUDIO % (date, day)
+                video_token = PLAN_VIDEO % (date, day)
+                try:
+                    text = self.overlay_text(ctx, date, day)
+                    blocked = None
+                except StageBlocked as exc:
+                    text, blocked = None, str(exc)
+                fontsize, _width = overlay_layout(text or "")
+                description = (
+                    "render %s/%s with the overlay %r" % (date, day, text)
+                    if text is not None else
+                    "render %s/%s would block: %s — the command below is what "
+                    "would run once that text exists" % (date, day, blocked))
+                ctx.plan(
+                    description,
+                    command=self.build_command(
+                        audio_token, video_token, font=font or "<missing>",
+                        fontsize=fontsize,
+                        background=PLAN_BACKGROUND if has_background else None,
+                        textfile=PLAN_TEXTFILE % (date, day)),
+                    output=os.path.relpath(target, ctx.root))
         return ctx.planned
 
     def execute(self, ctx):
         font = find_thai_font()
         if font is None:
             raise StageBlocked("no Thai font found on the server")
+        background = self.background_path(ctx)
+        mode = self.overlay_mode(ctx)
         rendered = 0
         for date in ctx.dates:
             for day in ctx.days:
@@ -987,9 +1324,13 @@ class VideoStage(StageAdapter):
                 if not os.path.isfile(audio):
                     raise StageBlocked(
                         "no audio for %s/%s — run the audio stage first" % (date, day))
+                text = self.overlay_text(ctx, date, day)
+                fontsize, width = overlay_layout(text)
+                textfile = self._write_overlay(ctx, date, day, text, width)
                 tmp = os.path.join(ctx.stage_dir(self.name), "%s_%s.mp4" % (date, day))
-                argv = self.build_command(audio, tmp,
-                                          "ดวงของชาววัน" + DAY_TH.get(day, day), font)
+                argv = self.build_command(audio, tmp, font=font, fontsize=fontsize,
+                                          background=background,
+                                          textfile=textfile)
                 code, lines = run_command(
                     argv, timeout=STAGE_TIMEOUT[self.name], cwd=ctx.root,
                     is_cancelled=ctx.cancelled)
@@ -998,10 +1339,15 @@ class VideoStage(StageAdapter):
                                       % (date, day, code, " | ".join(lines[-3:])))
                 target = self._target(ctx, date, day)
                 atomic_replace(tmp, target)
-                ctx.record("video", target, {"date": date, "day": day})
+                ctx.record("video", target, {"date": date, "day": day,
+                                             "overlay_text_mode": mode})
                 rendered += 1
-                ctx.log("video rendered for %s/%s" % (date, day), stage=self.name)
-        return {"videos": rendered}
+                ctx.log("video rendered for %s/%s (%s overlay%s)"
+                        % (date, day, mode,
+                           ", uploaded background" if background else ""),
+                        stage=self.name)
+        return {"videos": rendered, "overlay_text_mode": mode,
+                "background_image": bool(background)}
 
 
 def _ffmpeg_escape(text):
@@ -1567,6 +1913,44 @@ class AutomationService:
             sys.stderr.write("star-automation: %s\n"
                              % star_redact.redact_text(message, limit=1000))
 
+    # -- background images ----------------------------------------------
+    def protected_asset_ids(self):
+        """Assets a job still needs. Retention may never touch these.
+
+        "Still needs" means referenced by a job that has not finished — queued
+        or running. An image uploaded for a job that is waiting its turn is as
+        protected as one being rendered right now.
+        """
+        keep = set()
+        for status in star_jobs.ACTIVE_STATES:
+            for job in self.store.list_jobs(limit=star_jobs.MAX_JOBS_RETURNED,
+                                            status=status):
+                value = (job.get("input") or {}).get("background_asset_id")
+                if isinstance(value, str) and value:
+                    keep.add(value)
+        return keep
+
+    def store_background(self, data):
+        """Validate and store uploaded image bytes, then trim old ones.
+
+        Pruning is deliberately part of the upload path rather than a timer: it
+        runs when the directory has just grown, and it can only ever remove
+        images that no unfinished job references.
+        """
+        meta = star_assets.store_background(self.state, data)
+        try:
+            self.prune_backgrounds()
+        except (OSError, StateError) as exc:  # retention must not fail an upload
+            self.log_internal("background prune failed: %r" % exc)
+        return meta
+
+    def prune_backgrounds(self):
+        return star_assets.prune_backgrounds(
+            self.state, keep_ids=self.protected_asset_ids())
+
+    def background_exists(self, asset_id):
+        return star_assets.exists(self.state, asset_id)
+
     # -- job execution --------------------------------------------------
     def execute_job(self, job):
         ctx = JobContext(self, job, self.state.job_dir(job["id"]))
@@ -1649,9 +2033,23 @@ class AutomationService:
                 "max_range_days": star_jobs.MAX_RANGE_DAYS,
                 "max_concurrent_jobs": 1,
                 "stage_timeouts_seconds": dict(STAGE_TIMEOUT),
+                # The run form reads these rather than carrying its own copy,
+                # so the client-side check and the server's limit cannot drift.
+                "video": {
+                    "overlay_text_modes": list(star_jobs.OVERLAY_TEXT_MODES),
+                    "default_overlay_text_mode": star_jobs.DEFAULT_OVERLAY_TEXT_MODE,
+                    "max_custom_overlay_text": star_jobs.MAX_CUSTOM_OVERLAY_TEXT,
+                    "background_max_bytes": star_assets.MAX_UPLOAD_BYTES,
+                    "background_content_types": list(
+                        star_assets.ACCEPTED_CONTENT_TYPES),
+                },
             },
             "state": {
-                "permission_problems": self.state.audit(),
+                # Uploaded images are operator content living in the same
+                # owner-only tree as the credentials, so the health report
+                # checks their modes too rather than only the ones written by
+                # star_state itself.
+                "permission_problems": self.state.audit() + star_assets.audit(self.state),
                 "network_disabled": star_providers.network_disabled(),
             },
         }

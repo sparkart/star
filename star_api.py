@@ -22,6 +22,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import sys
 import tempfile
 import threading
@@ -509,6 +510,7 @@ MAX_QUERY_VALUE = 2048
 # stdlib-only modules in this repo, so the import is cheap and safe at module
 # load, but a broken optional dependency must never take the whole API down.
 try:
+    import star_assets
     import star_automation
     import star_jobs
     import star_providers
@@ -516,9 +518,201 @@ try:
     from star_state import StateError
     AUTOMATION_IMPORT_ERROR = None
 except Exception as _exc:  # pragma: no cover - only on a broken deployment
-    star_automation = star_jobs = star_providers = star_redact = None
+    star_assets = star_automation = star_jobs = star_providers = star_redact = None
     StateError = OSError
     AUTOMATION_IMPORT_ERROR = repr(_exc)
+
+
+# Routes whose body is bytes rather than JSON. They are read by their own
+# reader, with their own limit: MAX_BODY stays at 256 KiB for every JSON route,
+# because widening it for an image would widen it for the whole control plane.
+RAW_BODY_PATHS = frozenset(("/api/assets/background",))
+MAX_UPLOAD_BODY = (star_assets.MAX_UPLOAD_BYTES if star_assets is not None
+                   else 12 * 1024 * 1024)
+
+
+class RawUpload:
+    """A binary request body plus the type its sender claimed it was.
+
+    The claim is kept separate from the bytes on purpose: a handler has to be
+    able to compare what the caller said against what the file turned out to
+    be, which is impossible once the two are conflated.
+    """
+
+    __slots__ = ("data", "content_type")
+
+    def __init__(self, data, content_type):
+        self.data = data
+        self.content_type = content_type
+
+
+# Job artifacts are deliberately narrower than "any file under the project".
+# These are the only roots the production pipeline promotes generated output
+# into, and the only formats the control centre knows how to preview safely.
+ARTIFACT_ROOTS = (
+    ("output",),
+    ("content", "raw_astro"),
+    ("content", "horoscope"),
+    ("content", "scripts"),
+)
+ARTIFACT_TYPES = {
+    ".jpg": ("image/jpeg", "image"),
+    ".jpeg": ("image/jpeg", "image"),
+    ".png": ("image/png", "image"),
+    ".webp": ("image/webp", "image"),
+    ".mp4": ("video/mp4", "video"),
+    ".webm": ("video/webm", "video"),
+    ".mp3": ("audio/mpeg", "audio"),
+    ".wav": ("audio/wav", "audio"),
+    ".ogg": ("audio/ogg", "audio"),
+    ".m4a": ("audio/mp4", "audio"),
+    ".txt": ("text/plain; charset=utf-8", "text"),
+    ".json": ("application/json; charset=utf-8", "json"),
+}
+MAX_JOB_ARTIFACTS = 200
+
+
+def _artifact_name(basename):
+    """A display/download name that cannot carry header or path syntax."""
+    return re.sub(r"[^A-Za-z0-9._-]", "_", basename)[:180] or "artifact"
+
+
+class JobArtifact:
+    """A validated job-owned file, represented without exposing its path."""
+
+    __slots__ = ("root", "parts", "content_type", "media_type", "name", "size")
+
+    def __init__(self, root, parts, content_type, media_type, size):
+        self.root = root
+        self.parts = parts
+        self.content_type = content_type
+        self.media_type = media_type
+        self.name = _artifact_name(parts[-1])
+        self.size = size
+
+
+def _artifact_parts(value):
+    """Validate one stored project-relative artifact path lexically.
+
+    The open below also refuses symlinks component-by-component. Keeping the
+    lexical check separate makes traversal, Windows paths and unsupported
+    project locations fail before the filesystem is touched.
+    """
+    if not isinstance(value, str) or not value or len(value) > 1024:
+        raise ApiError(404, "artifact is unavailable")
+    if os.path.isabs(value) or "\\" in value or "\x00" in value:
+        raise ApiError(404, "artifact is unavailable")
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in value):
+        raise ApiError(404, "artifact is unavailable")
+    parts = tuple(value.split("/"))
+    if (not parts or any(not part or part in (".", "..") for part in parts)
+            or not any(parts[:len(prefix)] == prefix for prefix in ARTIFACT_ROOTS)):
+        raise ApiError(404, "artifact is unavailable")
+    extension = os.path.splitext(parts[-1])[1].lower()
+    if extension not in ARTIFACT_TYPES:
+        raise ApiError(404, "artifact is unavailable")
+    return parts, ARTIFACT_TYPES[extension]
+
+
+def _open_artifact(root, parts):
+    """Open a regular file below root without following any symlink.
+
+    Walking with directory file descriptors closes the usual realpath/open
+    race: an intermediate directory cannot be swapped for a symlink between a
+    validation check and the final open. Generated artifacts never need to be
+    symlinks, so failing closed is the simplest contract.
+    """
+    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    file_flags = os.O_RDONLY
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    cloexec = getattr(os, "O_CLOEXEC", 0)
+    directory_fd = None
+    try:
+        directory_fd = os.open(os.path.realpath(root), directory_flags | cloexec)
+        for part in parts[:-1]:
+            next_fd = os.open(part, directory_flags | nofollow | cloexec,
+                              dir_fd=directory_fd)
+            os.close(directory_fd)
+            directory_fd = next_fd
+        file_fd = os.open(parts[-1], file_flags | nofollow | cloexec,
+                          dir_fd=directory_fd)
+        info = os.fstat(file_fd)
+        if not stat.S_ISREG(info.st_mode):
+            os.close(file_fd)
+            raise ApiError(404, "artifact is unavailable")
+        return file_fd, info
+    except ApiError:
+        raise
+    except (OSError, ValueError):
+        raise ApiError(404, "artifact is unavailable")
+    finally:
+        if directory_fd is not None:
+            try:
+                os.close(directory_fd)
+            except OSError:
+                pass
+
+
+def resolve_job_artifact(service, job, index):
+    """Resolve an artifact index only through the selected job's result."""
+    if isinstance(index, bool) or not isinstance(index, int):
+        raise ApiError(404, "artifact is unavailable")
+    result = job.get("result") if isinstance(job, dict) else None
+    artifacts = result.get("artifacts") if isinstance(result, dict) else None
+    if (not isinstance(artifacts, list) or index < 0
+            or index >= min(len(artifacts), MAX_JOB_ARTIFACTS)):
+        raise ApiError(404, "artifact is unavailable")
+    entry = artifacts[index]
+    if not isinstance(entry, dict):
+        raise ApiError(404, "artifact is unavailable")
+    parts, (content_type, media_type) = _artifact_parts(entry.get("path"))
+    file_fd, info = _open_artifact(service.root, parts)
+    os.close(file_fd)
+    return JobArtifact(service.root, parts, content_type, media_type, info.st_size)
+
+
+def _artifact_views(service, job, verify=False):
+    """Safe render contract for artifacts; stored filesystem paths never ship.
+
+    `verify` opens every artifact, which is what makes `bytes` truthful and
+    drops entries whose file has since been deleted. Only the single-job
+    detail route pays that: the history list renders twenty jobs at a time and
+    would otherwise stat several thousand files to answer one poll. Redaction
+    is not conditional — no branch here can emit a stored path.
+    """
+    result = job.get("result") if isinstance(job, dict) else None
+    stored = result.get("artifacts") if isinstance(result, dict) else None
+    if not isinstance(stored, list):
+        return []
+    views = []
+    for index, entry in enumerate(stored[:MAX_JOB_ARTIFACTS]):
+        if not isinstance(entry, dict):
+            continue
+        try:
+            parts, (content_type, media_type) = _artifact_parts(entry.get("path"))
+        except ApiError:
+            continue
+        view = {
+            "id": str(index),
+            "name": _artifact_name(parts[-1]),
+            "kind": media_type,
+            "content_type": content_type,
+            "url": "/api/jobs/%s/artifacts/%d" % (job["id"], index),
+        }
+        if verify:
+            try:
+                view["bytes"] = resolve_job_artifact(service, job, index).size
+            except ApiError:
+                continue
+        # These are useful production labels, not path material. Keep them
+        # tightly bounded and let the central redactor inspect the values too.
+        for key in ("date", "day"):
+            value = entry.get(key)
+            if (isinstance(value, str) and len(value) <= 32
+                    and not any(ord(ch) < 32 or ord(ch) == 127 for ch in value)):
+                view[key] = value
+        views.append(view)
+    return views
 
 
 class RequestContext:
@@ -555,6 +749,12 @@ def _translate(exc):
     """Map a domain exception onto the API's error contract."""
     if star_jobs is not None and isinstance(exc, star_jobs.JobValidationError):
         return ApiError(400, exc.message, **({"field": exc.field} if exc.field else {}))
+    if star_assets is not None and isinstance(exc, star_assets.AssetError):
+        # AssetError messages are written to be shown to an operator: they name
+        # the rule that was broken and never a path, a byte or a file name.
+        status = exc.status if isinstance(exc.status, int) and 400 <= exc.status <= 599 else 400
+        return ApiError(status, exc.message,
+                        **({"field": exc.field} if exc.field else {}))
     if star_jobs is not None and isinstance(exc, star_jobs.JobConflict):
         return ApiError(409, exc.message, active_job=exc.active)
     if star_providers is not None and isinstance(exc, star_providers.ProviderError):
@@ -562,9 +762,14 @@ def _translate(exc):
     return None
 
 
-def _job_view(service, job, events=0, after_id=0):
+def _job_view(service, job, events=0, after_id=0, verify_artifacts=False):
     """A job as the API returns it: input echoed, credentials impossible."""
     view = dict(job)
+    result = view.get("result")
+    if isinstance(result, dict) and "artifacts" in result:
+        result = dict(result)
+        result["artifacts"] = _artifact_views(service, job, verify=verify_artifacts)
+        view["result"] = result
     if events:
         view["events"] = service.store.list_events(job["id"], limit=events,
                                                    after_id=after_id)
@@ -640,11 +845,80 @@ def route_jobs_list(ctx):
     }
 
 
+def _require_background_asset(service, job_input):
+    """A syntactically valid asset id that names nothing is still a bad request.
+
+    Validation in star_jobs can only say the id is 32 hex characters. Whether
+    those characters name an image this server actually holds is a question
+    only the asset store can answer, and it has to be answered before the job
+    is created: a job that references a missing background would sit in the
+    queue only to block at the video stage.
+    """
+    asset_id = job_input.get("background_asset_id")
+    if not asset_id:
+        return job_input
+    if not service.background_exists(asset_id):
+        raise ApiError(400, "no uploaded background image has that id; upload "
+                            "the image again and use the id from that response",
+                       field="background_asset_id")
+    return job_input
+
+
 def route_jobs_create(ctx):
     service = ctx.automation
-    job_input = star_jobs.validate_job_input(_as_object(ctx.body))
+    job_input = _require_background_asset(
+        service, star_jobs.validate_job_input(_as_object(ctx.body)))
     job = service.store.create_job(job_input, origin="manual")
     return 201, _job_view(service, job)
+
+
+def route_asset_background(ctx):
+    """Accept one image as a raw body and return the id the job will carry.
+
+    The body is bytes, not JSON, and it is read by its own reader with its own
+    much larger limit — the JSON limit stays where it is for every other route.
+    Nothing the caller said about those bytes is believed: the declared
+    Content-Type only has to be one of the three we accept, and it is then
+    checked against the type the stored file actually turned out to be, which
+    was decided by magic bytes, ffprobe and a real decode.
+    """
+    upload = ctx.body
+    if not isinstance(upload, RawUpload) or not upload.data:
+        raise ApiError(400, "send the image bytes as the request body")
+
+    declared = upload.content_type
+    if not declared:
+        raise ApiError(415, "Content-Type is required and must be one of: %s"
+                       % ", ".join(star_assets.ACCEPTED_CONTENT_TYPES),
+                       field="content_type")
+    if declared not in star_assets.ACCEPTED_CONTENT_TYPES:
+        raise ApiError(415, "Content-Type must be one of: %s"
+                       % ", ".join(star_assets.ACCEPTED_CONTENT_TYPES),
+                       field="content_type")
+
+    service = ctx.automation
+    meta = service.store_background(upload.data)
+    if meta.get("content_type") != declared:
+        # The header and the file disagree, so the upload is a mistake at best.
+        # The bytes were already validated as an image, but they are not the
+        # image the caller said they were sending, and keeping them would leave
+        # an asset nobody asked for.
+        star_assets.delete_background(service.state, meta["id"])
+        raise ApiError(400, "the file is a %s image but the request declared "
+                            "%s; send the file with its own type"
+                       % (meta.get("content_type"), declared),
+                       field="content_type")
+
+    return 201, {
+        "ok": True,
+        # public_meta is the whole response body on purpose: id, type, size and
+        # dimensions. No path, no file name, nothing that reveals the layout of
+        # the state directory.
+        "asset": star_assets.public_meta(meta),
+        "note": "the image is stored outside the project tree and is never "
+                "served back; a job references it by id only",
+        "uploaded_at": star_jobs.utcnow(),
+    }
 
 
 def route_job_detail(ctx):
@@ -656,7 +930,22 @@ def route_job_detail(ctx):
     limit = _int_param(ctx.query, "events", default=200, low=0,
                        high=star_jobs.MAX_EVENTS_RETURNED)
     after = _int_param(ctx.query, "after_id", default=0, low=0, high=2 ** 31)
-    return 200, _job_view(service, job, events=limit, after_id=after)
+    return 200, _job_view(service, job, events=limit, after_id=after,
+                          verify_artifacts=True)
+
+
+def route_job_artifact(ctx):
+    """Return one validated artifact that belongs to exactly one job result."""
+    service = ctx.automation
+    job_id = star_jobs.valid_job_id(ctx.params.get("id"))
+    job = service.store.get_job(job_id)
+    if job is None:
+        raise ApiError(404, "unknown job")
+    try:
+        index = int(ctx.params.get("artifact"))
+    except (TypeError, ValueError):
+        raise ApiError(404, "artifact is unavailable")
+    return 200, resolve_job_artifact(service, job, index)
 
 
 def route_job_cancel(ctx):
@@ -689,11 +978,16 @@ def route_job_retry(ctx):
     overrides = ctx.body if isinstance(ctx.body, dict) else {}
     merged = dict(parent["input"])
     merged.pop("dates", None)
+    # The video customisation travels with the retry: a retried job renders the
+    # same overlay over the same background as the job it repeats, unless the
+    # caller overrides one of them here. The asset id is re-checked below
+    # because retention may have removed the image since the parent ran.
     for key in ("from_date", "to_date", "days", "stages", "platforms", "dry_run",
-                "force", "note"):
+                "force", "note", "overlay_text_mode", "custom_overlay_text",
+                "background_asset_id"):
         if key in overrides:
             merged[key] = overrides[key]
-    job_input = star_jobs.validate_job_input(merged)
+    job_input = _require_background_asset(service, star_jobs.validate_job_input(merged))
     job = service.store.create_job(job_input, parent_id=parent["id"], origin="retry")
     service.store.add_event(job["id"], "info", "manual retry of job %s" % parent["id"])
     return 201, _job_view(service, job)
@@ -752,6 +1046,7 @@ def _int_param(query, name, default, low, high):
 
 
 HEX32 = r"(?P<id>[0-9a-f]{32})"
+ARTIFACT_INDEX = r"(?P<artifact>0|[1-9][0-9]{0,2})"
 
 # (method, compiled path pattern, handler, requires_intent_header)
 AUTOMATION_ROUTES = (
@@ -762,7 +1057,10 @@ AUTOMATION_ROUTES = (
     ("POST", r"/api/providers/test", route_provider_test, True),
     ("GET", r"/api/jobs", route_jobs_list, False),
     ("POST", r"/api/jobs", route_jobs_create, True),
+    ("POST", r"/api/assets/background", route_asset_background, True),
     ("GET", r"/api/jobs/" + HEX32, route_job_detail, False),
+    ("GET", r"/api/jobs/" + HEX32 + r"/artifacts/" + ARTIFACT_INDEX,
+     route_job_artifact, False),
     ("POST", r"/api/jobs/" + HEX32 + r"/cancel", route_job_cancel, True),
     ("POST", r"/api/jobs/" + HEX32 + r"/retry", route_job_retry, True),
     ("GET", r"/api/schedule", route_schedule_get, False),
@@ -779,7 +1077,8 @@ COMPILED_AUTOMATION = tuple(
 # Paths that exist but where an unmatched id should still 404 rather than
 # falling through to "unknown endpoint" — purely cosmetic, but it makes a
 # mistyped job id obvious in the response.
-JOB_PATH_RE = re.compile(r"^/api/jobs/[^/]+(?:/(?:cancel|retry))?$")
+JOB_PATH_RE = re.compile(
+    r"^/api/jobs/[^/]+(?:/(?:cancel|retry)|/artifacts/[^/]+)?$")
 
 
 def match_automation(method, path):
@@ -834,6 +1133,81 @@ class StarHandler(BaseHTTPRequestHandler):
         payload = {"error": message, "status": status}
         payload.update(extra)
         self.send_json(status, payload)
+
+    def _send_artifact_headers(self, artifact, status, length, content_range=None):
+        self.send_response(status)
+        self.send_header("Content-Type", artifact.content_type)
+        self.send_header("Content-Length", str(length))
+        self.send_header("Content-Disposition", 'inline; filename="%s"' % artifact.name)
+        self.send_header("Accept-Ranges", "bytes")
+        if content_range:
+            self.send_header("Content-Range", content_range)
+        self.send_header("Cache-Control", "private, no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+        self.send_header("Content-Security-Policy",
+                         "default-src 'none'; frame-ancestors 'none'; sandbox")
+        self.send_header("Permissions-Policy", "geolocation=(), camera=(), microphone=()")
+        self.end_headers()
+
+    def _requested_byte_range(self, size):
+        raw = self.headers.get("Range")
+        if not raw:
+            return None
+        match = re.fullmatch(r"bytes=(\d*)-(\d*)", raw.strip())
+        if match is None or (not match.group(1) and not match.group(2)) or size <= 0:
+            return False
+        if not match.group(1):
+            suffix = int(match.group(2))
+            if suffix <= 0:
+                return False
+            return max(0, size - suffix), size - 1
+        start = int(match.group(1))
+        end = int(match.group(2)) if match.group(2) else size - 1
+        if start >= size or end < start:
+            return False
+        return start, min(end, size - 1)
+
+    def send_artifact(self, artifact):
+        """Stream a validated file, including byte ranges for native media."""
+        try:
+            file_fd, info = _open_artifact(artifact.root, artifact.parts)
+        except ApiError as exc:
+            self.send_error_json(exc.status, exc.message)
+            return
+
+        requested = self._requested_byte_range(info.st_size)
+        if requested is False:
+            os.close(file_fd)
+            self.send_response(416)
+            self.send_header("Content-Range", "bytes */%d" % info.st_size)
+            self.send_header("Content-Length", "0")
+            self.send_header("Cache-Control", "private, no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            return
+
+        start, end = requested if requested is not None else (0, info.st_size - 1)
+        length = max(0, end - start + 1)
+        status = 206 if requested is not None else 200
+        content_range = ("bytes %d-%d/%d" % (start, end, info.st_size)
+                         if requested is not None else None)
+        self._send_artifact_headers(artifact, status, length, content_range)
+        try:
+            with os.fdopen(file_fd, "rb") as source:
+                if start:
+                    source.seek(start)
+                remaining = length
+                while remaining:
+                    chunk = source.read(min(64 * 1024, remaining))
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    remaining -= len(chunk)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     # -- security ---------------------------------------------------
     def same_origin_ok(self):
@@ -927,6 +1301,56 @@ class StarHandler(BaseHTTPRequestHandler):
         except (ValueError, UnicodeDecodeError):
             raise ApiError(400, "request body must be valid UTF-8 JSON")
 
+    def read_binary_body(self, limit=MAX_UPLOAD_BODY):
+        """Read a raw body up to `limit` bytes. Used only by upload routes.
+
+        Deliberately a second reader rather than a flag on read_body: the JSON
+        limit is a security property of every other endpoint and must not
+        become a parameter that an upload route can widen for everyone. The
+        oversize check happens on Content-Length, so an over-limit upload is
+        refused before a single byte of it is read.
+        """
+        keep_alive = self.close_connection
+        self.close_connection = True
+        if self.headers.get("Transfer-Encoding", "").lower().strip() == "chunked":
+            raise ApiError(411, "Content-Length is required")
+        raw_length = self.headers.get("Content-Length")
+        if raw_length is None:
+            raise ApiError(411, "Content-Length is required")
+        try:
+            length = int(raw_length)
+        except ValueError:
+            raise ApiError(400, "invalid Content-Length")
+        if length < 0:
+            raise ApiError(400, "invalid Content-Length")
+        if length > limit:
+            raise ApiError(413, "the upload exceeds the %d MiB limit"
+                           % (limit // (1024 * 1024)))
+        if length == 0:
+            raise ApiError(400, "request body is required")
+        data = self.rfile.read(length)
+        if len(data) != length:
+            raise ApiError(400, "truncated request body")
+        self.close_connection = keep_alive
+        return RawUpload(data, self.declared_content_type())
+
+    def declared_content_type(self):
+        """The bare media type the caller sent, lowercased, parameters dropped."""
+        raw = self.headers.get("Content-Type") or ""
+        return raw.split(";")[0].strip().lower()
+
+    def drop_unread_body(self):
+        """Refuse a request without reading its body, and without desyncing.
+
+        Every guard in the dispatcher answers before the body is read, which on
+        a keep-alive connection would leave the next request to be parsed out
+        of the middle of this one's payload. Draining instead would mean
+        reading up to 12 MiB that a rejected caller chose for us, so the
+        connection is closed: correct for the client, free for the server.
+        """
+        if self.headers.get("Content-Length") or self.headers.get("Transfer-Encoding"):
+            self.close_connection = True
+
     # -- dispatch ---------------------------------------------------
     def dispatch(self, method):
         path = urlsplit(self.path).path
@@ -968,42 +1392,57 @@ class StarHandler(BaseHTTPRequestHandler):
     def dispatch_automation(self, method, path):
         found, allowed = match_automation(method, path)
         if not allowed:
+            self.drop_unread_body()
             if JOB_PATH_RE.match(path):
                 self.send_error_json(404, "unknown job")
                 return
             self.send_error_json(404, "unknown endpoint: %s" % path)
             return
         if method != "OPTIONS" and found is None:
+            self.drop_unread_body()
             self.send_json(405, {"error": "method not allowed", "status": 405,
                                  "allow": sorted(allowed)},
                            {"Allow": ", ".join(sorted(allowed))})
             return
         if not self.same_origin_ok():
+            self.drop_unread_body()
             self.send_error_json(403, "cross-origin request rejected")
             return
         if not self.host_ok():
+            self.drop_unread_body()
             self.send_error_json(403, "host not allowed")
             return
         if method == "OPTIONS":
+            # An OPTIONS carrying a body is malformed rather than dangerous,
+            # but the body is still never read, so the socket cannot be reused.
+            self.drop_unread_body()
             self.send_json(204, {}, {"Allow": ", ".join(sorted(allowed))})
             return
 
         handler, params, requires_intent = found
         if requires_intent and not self.intent_ok():
+            self.drop_unread_body()
             self.send_error_json(
                 403, "missing or wrong %s header" % INTENT_HEADER,
                 required_header={INTENT_HEADER: INTENT_VALUE})
             return
         if AUTOMATION_IMPORT_ERROR is not None:
+            self.drop_unread_body()
             self.send_error_json(503, "automation modules failed to load on this server")
             return
 
         try:
             body = None
             if method in ("POST", "PUT"):
-                # Cancel and retry are intentionally body-optional: an empty
-                # POST is the natural thing for a button to send.
-                body = self.read_body(allow_empty=True)
+                if path in RAW_BODY_PATHS:
+                    # Bytes, not JSON, and read by the upload reader with the
+                    # upload limit. Nothing else on the control plane can reach
+                    # this branch: the set is a literal, not a prefix match.
+                    body = self.read_binary_body()
+                else:
+                    # Cancel and retry are intentionally body-optional: an empty
+                    # POST is the natural thing for a button to send.
+                    body = self.read_body(allow_empty=True)
             ctx = RequestContext(self.server, method, path, params,
                                  self.parse_query(), body,
                                  self.headers.get("Host", ""), self.request_scheme())
@@ -1023,7 +1462,10 @@ class StarHandler(BaseHTTPRequestHandler):
             self.log_message("unhandled error on %s %s: %r", method, path, exc)
             self.send_error_json(500, "internal server error")
             return
-        self.send_json(status, payload)
+        if isinstance(payload, JobArtifact):
+            self.send_artifact(payload)
+        else:
+            self.send_json(status, payload)
 
     def do_GET(self):
         self.dispatch("GET")
