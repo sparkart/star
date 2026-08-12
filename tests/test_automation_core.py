@@ -1358,6 +1358,21 @@ class RecordingStage(star_automation.StageAdapter):
         return {"ok": True}
 
 
+class ArtifactRecordingStage(RecordingStage):
+    """A production-only stage that records one promoted text artifact."""
+
+    label = "artifact recording"
+
+    def execute(self, ctx):
+        self.executed += 1
+        target = ctx.project_path("output", "2026-08-11", "report.txt")
+        artifact = ctx.record("text", target, {
+            "date": "2026-08-11",
+            "day": "mon",
+        })
+        return {"recorded": artifact}
+
+
 class TestPipeline(TempEnv):
     def setUp(self):
         super().setUp()
@@ -1380,6 +1395,56 @@ class TestPipeline(TempEnv):
         self.assertEqual(stage.planned, 1)
         self.assertEqual(done["result"]["provider_calls_made"], 0)
         self.assertTrue(done["result"]["dry_run"])
+
+    def test_context_record_keeps_a_project_relative_artifact_contract(self):
+        job = self.make_job(dry_run=False)
+        ctx = star_automation.JobContext(
+            self.svc, job, self.svc.state.job_dir(job["id"]))
+        target = os.path.join(self.root, "content", "scripts", "daily.txt")
+
+        entry = ctx.record("text", target, {
+            "date": "2026-08-11",
+            "day": "mon",
+        })
+
+        self.assertEqual(entry, {
+            "kind": "text",
+            "path": os.path.join("content", "scripts", "daily.txt"),
+            "date": "2026-08-11",
+            "day": "mon",
+        })
+        self.assertEqual(ctx.artifacts, [entry])
+        self.assertIs(ctx.artifacts[0], entry)
+
+    def test_production_result_carries_context_record_artifacts(self):
+        stage = ArtifactRecordingStage()
+        star_automation.STAGE_ADAPTERS["astro"] = stage
+
+        done = self.svc.execute_job(self.make_job(dry_run=False))
+
+        expected = {
+            "kind": "text",
+            "path": os.path.join("output", "2026-08-11", "report.txt"),
+            "date": "2026-08-11",
+            "day": "mon",
+        }
+        self.assertEqual(done["status"], "succeeded")
+        self.assertFalse(done["result"]["dry_run"])
+        self.assertEqual(done["result"]["artifacts"], [expected])
+        self.assertEqual(done["result"]["stages"][0]["result"],
+                         {"recorded": expected})
+
+    def test_dry_run_never_executes_or_reports_recorded_artifacts(self):
+        stage = ArtifactRecordingStage()
+        star_automation.STAGE_ADAPTERS["astro"] = stage
+
+        done = self.svc.execute_job(self.make_job(dry_run=True))
+
+        self.assertEqual(done["status"], "succeeded")
+        self.assertTrue(done["result"]["dry_run"])
+        self.assertEqual(stage.executed, 0)
+        self.assertEqual(done["result"].get("artifacts", []), [])
+        self.assertNotIn("report.txt", json.dumps(done["result"]))
 
     def test_dry_run_writes_nothing_into_the_project_tree(self):
         before = sorted(os.listdir(self.root))

@@ -930,7 +930,8 @@ def route_job_detail(ctx):
     limit = _int_param(ctx.query, "events", default=200, low=0,
                        high=star_jobs.MAX_EVENTS_RETURNED)
     after = _int_param(ctx.query, "after_id", default=0, low=0, high=2 ** 31)
-    return 200, _job_view(service, job, events=limit, after_id=after)
+    return 200, _job_view(service, job, events=limit, after_id=after,
+                          verify_artifacts=True)
 
 
 def route_job_artifact(ctx):

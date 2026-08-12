@@ -156,7 +156,11 @@
 
   function artifactCard(artifact) {
     var card = el('article', 'ac-artifact-card is-' + artifact.kind);
-    var open = function () { openPreview(artifact, document.activeElement); };
+    var open = function (event) {
+      var trigger = event && event.currentTarget;
+      if (!trigger || typeof trigger.focus !== 'function') trigger = document.activeElement;
+      openPreview(artifact, trigger);
+    };
 
     if (artifact.kind === 'audio') {
       var audioWrap = el('div', 'ac-artifact-audio');
@@ -243,15 +247,21 @@
     loading.appendChild(el('span', 'sk ac-preview-sk-line'));
     body.appendChild(loading);
 
-    previewAbort = new AbortController();
+    /* The controller is compared by identity below: a preview opened while
+       this fetch is still in flight installs its own controller, and every
+       late callback from the superseded fetch must then leave both the
+       shared abort slot and the dialog body alone. */
+    var controller = new AbortController();
+    previewAbort = controller;
     fetch(artifact.url, {
       method: 'GET', cache: 'no-store', credentials: 'same-origin',
       headers: { Accept: artifact.kind === 'json' ? 'application/json' : 'text/plain' },
-      signal: previewAbort.signal
+      signal: controller.signal
     }).then(function (response) {
       if (!response.ok) throw new Error('เซิร์ฟเวอร์ตอบกลับ HTTP ' + response.status);
       return response.text();
     }).then(function (text) {
+      if (previewAbort !== controller) return;
       if (artifact.kind === 'json') {
         try { text = JSON.stringify(JSON.parse(text), null, 2); } catch (err) { /* keep source */ }
       }
@@ -262,8 +272,11 @@
       body.removeAttribute('aria-busy');
     }).catch(function (err) {
       if (err && err.name === 'AbortError') return;
+      if (previewAbort !== controller) return;
       previewFailure('โหลดไฟล์ไม่สำเร็จ ลองปิดแล้วเปิดตัวอย่างอีกครั้ง');
-    }).finally(function () { previewAbort = null; });
+    }).finally(function () {
+      if (previewAbort === controller) previewAbort = null;
+    });
   }
 
   function openPreview(artifact, trigger) {
@@ -274,6 +287,13 @@
     }
     if (!ARTIFACT_LABEL[artifact.kind]) {
       toast('ไฟล์ชนิดนี้ยังไม่มีตัวแสดงตัวอย่าง', 'error');
+      return;
+    }
+    /* Checked before any state or content changes: a browser without native
+       dialog support must not leave a fetch in flight or a focus target set
+       for a dialog that will never open. */
+    if (typeof dialog.showModal !== 'function') {
+      toast('เบราว์เซอร์นี้ไม่รองรับหน้าต่างตัวอย่าง', 'error');
       return;
     }
     if (dialog.open) closePreview();
@@ -323,10 +343,6 @@
       previewText(artifact);
     }
 
-    if (typeof dialog.showModal !== 'function') {
-      toast('เบราว์เซอร์นี้ไม่รองรับหน้าต่างตัวอย่าง', 'error');
-      return;
-    }
     dialog.showModal();
     window.requestAnimationFrame(function () { $('#ac-preview-close').focus(); });
   }
@@ -383,10 +399,19 @@
       closePreview();
     });
     dialog.addEventListener('close', function () {
+      /* dialog.close() fires this event from a queued task, so switching
+         straight from one artifact to another reopens the dialog before the
+         superseded lifecycle's close event arrives. Finding the dialog open
+         again marks the event as stale: it owns no cleanup, and must leave
+         the freshly rendered body, href, and focus target alone. */
+      if (dialog.open) return;
       clear($('#ac-preview-body'));
       $('#ac-preview-original').removeAttribute('href');
-      if (previewReturnFocus && previewReturnFocus.isConnected) previewReturnFocus.focus();
+      var returnTarget = previewReturnFocus;
       previewReturnFocus = null;
+      if (returnTarget && returnTarget.isConnected) {
+        window.requestAnimationFrame(function () { returnTarget.focus(); });
+      }
     });
   }
 

@@ -777,6 +777,239 @@ class TestContractSurface(unittest.TestCase):
             py_compile.compile(os.path.join(ROOT, name), doraise=True)
 
 
+class TestGeneratedArtifactPreview(unittest.TestCase):
+    """Static accessibility, URL-safety, and responsive preview contracts."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.html = source_of(os.path.join("automation", "jobs", "index.html"))
+        cls.flat_html = re.sub(r"\s+", " ", cls.html)
+        cls.js = source_of(os.path.join("automation", "pages-jobs.js"))
+        cls.css = source_of(os.path.join("automation", "automation.css"))
+
+    def tag_with_id(self, element_id):
+        match = re.search(r'<[a-z]+[^>]*\bid="%s"[^>]*>'
+                          % re.escape(element_id), self.flat_html)
+        self.assertIsNotNone(match, "no element carries id=%r" % element_id)
+        return match.group(0)
+
+    def css_block(self, header):
+        start = self.css.index(header)
+        open_brace = self.css.index("{", start)
+        depth = 0
+        for index in range(open_brace, len(self.css)):
+            if self.css[index] == "{":
+                depth += 1
+            elif self.css[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    return self.css[open_brace:index + 1]
+        raise AssertionError("unbalanced braces after %r" % header)
+
+    def test_the_page_uses_a_labelled_native_preview_dialog(self):
+        dialog = self.tag_with_id("ac-preview-dialog")
+        self.assertTrue(dialog.startswith("<dialog "), dialog)
+        self.assertIn('aria-modal="true"', dialog)
+        self.assertIn('aria-labelledby="ac-preview-title"', dialog)
+        self.assertIn('aria-describedby="ac-preview-meta"', dialog)
+        self.assertIn('id="ac-preview-title"', self.html)
+        self.assertIn('id="ac-preview-meta"', self.html)
+
+        close = self.tag_with_id("ac-preview-close")
+        self.assertIn('type="button"', close)
+        self.assertRegex(close, r'aria-label="[^"]*ปิด[^"]*"')
+        self.assertIn('id="ac-preview-body"', self.html)
+
+        original = self.tag_with_id("ac-preview-original")
+        self.assertTrue(original.startswith("<a "), original)
+        self.assertIn('target="_blank"', original)
+        self.assertIn('rel="noopener"', original)
+        self.assertIn("เปิดไฟล์ต้นฉบับ", self.html)
+
+    def test_artifact_urls_are_exactly_job_scoped_and_bounded(self):
+        """Exercise the two regexes that form the validator's static shape.
+
+        Browser URL parsing is deliberately left to the source assertions
+        below; the accepted and rejected examples exercise the path contract
+        without needing a DOM-capable JavaScript harness.
+        """
+        body = js_function_body(self.js, "isSafeArtifactUrl")
+        job_match = re.search(r"!/([^/]+)/\.test\(jobId\)", body)
+        index_match = re.search(
+            r"!/([^/]+)/\.test\(value\.slice\(prefix\.length\)\)", body)
+        self.assertIsNotNone(job_match, "the job id has no anchored validator")
+        self.assertIsNotNone(index_match, "the artifact index has no validator")
+        job_pattern = re.compile(job_match.group(1))
+        index_pattern = re.compile(index_match.group(1))
+
+        def accepts(value, job_id):
+            if not isinstance(value, str) or not job_pattern.fullmatch(job_id):
+                return False
+            prefix = "/api/jobs/%s/artifacts/" % job_id
+            return value.startswith(prefix) and bool(
+                index_pattern.fullmatch(value[len(prefix):]))
+
+        job_id = "0123456789abcdef0123456789abcdef"
+        for index in ("0", "1", "42", "999"):
+            self.assertTrue(accepts("/api/jobs/%s/artifacts/%s" % (job_id, index),
+                                    job_id), index)
+
+        other_job = "fedcba9876543210fedcba9876543210"
+        rejected = (
+            "https://example.com/api/jobs/%s/artifacts/0" % job_id,
+            "data:text/plain,hello",
+            "javascript:alert(1)",
+            "/api/jobs/%s/artifacts/0?download=1" % job_id,
+            "/api/jobs/%s/artifacts/0#preview" % job_id,
+            "/api/jobs/%s/artifacts/0" % other_job,
+            "/api/jobs/%s/artifacts/../0" % job_id,
+            "/api/jobs/%s/artifacts/%%2e%%2e/0" % job_id,
+            "/api/jobs/%s/artifacts/" % job_id,
+            "/api/jobs/%s/artifacts/-1" % job_id,
+            "/api/jobs/%s/artifacts/00" % job_id,
+            "/api/jobs/%s/artifacts/1.0" % job_id,
+            "/api/jobs/%s/artifacts/1000" % job_id,
+        )
+        for value in rejected:
+            self.assertFalse(accepts(value, job_id), value)
+
+        self.assertIn("var prefix = '/api/jobs/' + jobId + '/artifacts/';", body)
+        self.assertIn("value.indexOf(prefix) !== 0", body)
+        self.assertIn("parsed.origin === window.location.origin", body)
+        self.assertIn("parsed.pathname === value", body)
+        self.assertIn("!parsed.search && !parsed.hash", body)
+
+    def test_every_supported_artifact_kind_has_a_preview_branch(self):
+        labels = self.js[self.js.index("var ARTIFACT_LABEL = {"):
+                         self.js.index("var ARTIFACT_ICON = {")]
+        self.assertEqual(set(re.findall(r"\b(image|video|audio|text|json):", labels)),
+                         {"image", "video", "audio", "text", "json"})
+
+        preview = js_function_body(self.js, "openPreview")
+        for kind, element in (("image", "img"), ("video", "video"),
+                              ("audio", "audio")):
+            self.assertIn("artifact.kind === '%s'" % kind, preview)
+            self.assertIn("document.createElement('%s')" % element, preview)
+        self.assertRegex(preview, r"else\s*\{\s*previewText\(artifact\);")
+
+        text_preview = js_function_body(self.js, "previewText")
+        self.assertIn("artifact.kind === 'json'", text_preview)
+        self.assertIn("JSON.stringify(JSON.parse(text), null, 2)", text_preview)
+        self.assertIn("artifact.kind === 'json' ? 'application/json' : 'text/plain'",
+                      text_preview)
+        self.assertIn("el('pre', 'ac-preview-text')", text_preview)
+
+    def test_dialog_close_paths_trap_and_restore_focus_and_stop_media(self):
+        card = js_function_body(self.js, "artifactCard")
+        self.assertIn("event.currentTarget", card,
+                      "focus must return to the clicked preview control, not body")
+        self.assertIn("openPreview(artifact, trigger);", card)
+
+        wire = js_function_body(self.js, "wirePreviewDialog")
+        self.assertIn("event.key === 'Escape'", wire)
+        self.assertIn("event.target === dialog", wire,
+                      "clicking the native backdrop must close the dialog")
+        self.assertIn("addEventListener('cancel'", wire)
+        self.assertGreaterEqual(wire.count("closePreview();"), 3)
+        self.assertIn("trapPreviewFocus(event);", wire)
+        self.assertIn("var returnTarget = previewReturnFocus;", wire)
+        self.assertIn("previewReturnFocus = null;", wire)
+        self.assertIn("returnTarget.isConnected", wire)
+        self.assertIn("window.requestAnimationFrame", wire)
+        self.assertIn("returnTarget.focus();", wire)
+
+        trap = js_function_body(self.js, "trapPreviewFocus")
+        self.assertIn("event.key !== 'Tab'", trap)
+        self.assertIn("event.shiftKey", trap)
+        self.assertIn("document.activeElement === first", trap)
+        self.assertIn("document.activeElement === last", trap)
+        self.assertIn("last.focus();", trap)
+        self.assertIn("first.focus();", trap)
+
+        close = js_function_body(self.js, "closePreview")
+        self.assertIn("previewAbort.abort();", close)
+        self.assertIn("AC.$$('audio, video', dialog)", close)
+        self.assertIn("media.pause();", close)
+        self.assertIn("dialog.close();", close)
+
+    def test_a_superseded_text_fetch_can_neither_repaint_nor_disarm_the_dialog(self):
+        """Switching previews while a text fetch is in flight: the old fetch's
+        late callbacks (its abort rejection runs as a microtask after the new
+        preview has installed its own controller) must not null the shared
+        abort slot, and its stale response must never overwrite the body of
+        whichever preview is on screen by then."""
+        text_preview = js_function_body(self.js, "previewText")
+        self.assertIn("var controller = new AbortController();", text_preview)
+        self.assertIn("previewAbort = controller;", text_preview)
+        self.assertIn("signal: controller.signal", text_preview)
+        self.assertEqual(
+            text_preview.count("if (previewAbort !== controller) return;"), 2,
+            "both the success and the failure path must check that this "
+            "fetch still owns the dialog before touching it")
+        self.assertIn("if (previewAbort === controller) previewAbort = null;",
+                      text_preview)
+        self.assertNotIn("previewAbort = new AbortController()", text_preview)
+
+    def test_a_superseded_close_event_cannot_clear_the_reopened_preview(self):
+        """Switching straight from one artifact card to another: dialog.close()
+        fires its close event from a queued task, and openPreview reopens the
+        dialog synchronously before that task runs, so the stale close event
+        arrives while the next preview is already on screen. The handler must
+        recognise this — the dialog it finds is open again — and leave the new
+        body, href, and focus target untouched, while a genuine close (dialog
+        still closed when the event fires) keeps its full cleanup."""
+        preview = js_function_body(self.js, "openPreview")
+        reopen = preview.index("if (dialog.open) closePreview();")
+        self.assertLess(reopen, preview.index("previewReturnFocus = trigger"),
+                        "the old lifecycle must be closed before the new "
+                        "focus target is recorded")
+        self.assertLess(reopen, preview.index("dialog.showModal();"))
+
+        wire = js_function_body(self.js, "wirePreviewDialog")
+        handler = wire[wire.index("addEventListener('close'"):]
+        guard = handler.index("if (dialog.open) return;")
+        for cleanup in ("clear($('#ac-preview-body'));",
+                        "$('#ac-preview-original').removeAttribute('href');",
+                        "var returnTarget = previewReturnFocus;",
+                        "previewReturnFocus = null;",
+                        "returnTarget.focus();"):
+            self.assertLess(guard, handler.index(cleanup),
+                            "a stale close event must return before %r"
+                            % cleanup)
+
+    def test_an_unsupported_browser_never_starts_a_preview_fetch(self):
+        """The showModal capability check must run before any state change:
+        no fetch in flight, no focus target recorded, no body rebuilt for a
+        dialog that will never open."""
+        preview = js_function_body(self.js, "openPreview")
+        gate = preview.index("typeof dialog.showModal !== 'function'")
+        self.assertLess(gate, preview.index("previewReturnFocus = trigger"))
+        self.assertLess(gate, preview.index("previewText(artifact)"))
+        self.assertLess(gate, preview.index("dialog.showModal();"))
+
+    def test_artifacts_and_dialog_fit_a_375px_viewport(self):
+        self.assertIn("@media (max-width: 400px)", self.css)
+        narrow = self.css_block("@media (max-width: 380px)")
+        self.assertIn(".ac-artifact-grid", narrow)
+        self.assertIn("grid-template-columns: minmax(0, 1fr)", narrow)
+        self.assertIn(".ac-artifact-card", narrow)
+        self.assertIn("width: 100%", narrow)
+        self.assertIn(".ac-preview-dialog", narrow)
+        self.assertIn("width: calc(100vw - 1rem)", narrow)
+        self.assertIn("max-height: calc(100dvh - .75rem)", narrow)
+        self.assertIn(".ac-preview-body", narrow)
+        self.assertIn("max-height: calc(100dvh - 9.5rem)", narrow)
+
+    def test_reduced_motion_stops_preview_and_card_motion(self):
+        reduced = self.css_block("@media (prefers-reduced-motion: reduce)")
+        self.assertIn(".ac-artifact-card", reduced)
+        self.assertIn(".ac-artifact-cue", reduced)
+        self.assertIn("transition: none", reduced)
+        self.assertIn(".ac-preview-dialog[open]", reduced)
+        self.assertIn(".ac-preview-dialog::backdrop", reduced)
+        self.assertIn("animation: none", reduced)
+
+
 class TestVideoCustomisationForm(unittest.TestCase):
     """The run form's background image and overlay text controls.
 

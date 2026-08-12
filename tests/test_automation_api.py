@@ -157,6 +157,67 @@ class TestBackwardCompatibility(AutomationApiTestCase):
         self.assertIn("frame-ancestors 'none'", headers["Content-Security-Policy"])
 
 
+# ── generated artifact path contract ────────────────────────────────
+
+class TestArtifactPathContract(unittest.TestCase):
+    def assert_unavailable(self, value):
+        with self.assertRaises(star_api.ApiError) as raised:
+            star_api._artifact_parts(value)
+        self.assertEqual(raised.exception.status, 404)
+        self.assertEqual(raised.exception.message, "artifact is unavailable")
+
+    def test_every_allowed_root_and_type_has_the_declared_preview_kind(self):
+        for root in star_api.ARTIFACT_ROOTS:
+            for extension, expected_type in star_api.ARTIFACT_TYPES.items():
+                value = "/".join(root + ("nested", "preview" + extension))
+                parts, artifact_type = star_api._artifact_parts(value)
+                self.assertEqual(parts, root + ("nested", "preview" + extension),
+                                 value)
+                self.assertEqual(artifact_type, expected_type, value)
+
+    def test_traversal_empty_segments_and_dot_segments_are_rejected(self):
+        for value in (
+                "../output/preview.png",
+                "output/../content/scripts/preview.txt",
+                "output/./preview.png",
+                "output//preview.png",
+                "output/nested/..",
+                "./output/preview.png",
+                "output/",
+        ):
+            self.assert_unavailable(value)
+
+    def test_absolute_and_backslash_paths_are_rejected(self):
+        for value in (
+                "/output/preview.png",
+                os.path.abspath("output/preview.png"),
+                r"output\preview.png",
+                r"C:\output\preview.png",
+                r"\\server\share\preview.png",
+        ):
+            self.assert_unavailable(value)
+
+    def test_unsupported_roots_and_types_are_rejected(self):
+        for value in (
+                "content/overrides/preview.txt",
+                "content/preview.txt",
+                "cdn/star/preview.json",
+                "output-private/preview.png",
+                "outputs/preview.png",
+                "output/preview.svg",
+                "output/preview.html",
+                "output/preview.mov",
+                "output/preview.md",
+                "output/preview.png.exe",
+        ):
+            self.assert_unavailable(value)
+
+    def test_non_strings_controls_and_overlong_paths_are_rejected(self):
+        for value in (None, b"output/preview.png", "", "output/bad\nname.png",
+                      "output/" + "x" * 1024 + ".png"):
+            self.assert_unavailable(value)
+
+
 # ── routing ───────────────────────────────────────────────────────────
 
 class TestRouting(AutomationApiTestCase):
@@ -170,6 +231,7 @@ class TestRouting(AutomationApiTestCase):
             ("POST", "/api/jobs"),
             ("POST", "/api/assets/background"),
             ("GET", "/api/jobs/" + "a" * 32),
+            ("GET", "/api/jobs/" + "a" * 32 + "/artifacts/0"),
             ("POST", "/api/jobs/" + "a" * 32 + "/cancel"),
             ("POST", "/api/jobs/" + "a" * 32 + "/retry"),
             ("GET", "/api/schedule"),
@@ -610,6 +672,214 @@ class TestJobs(AutomationApiTestCase):
         query = "&".join("k%d=1" % i for i in range(40))
         status, _payload = self.get("/api/jobs?" + query)
         self.assertEqual(status, 400)
+
+
+# ── job-owned generated artifacts ───────────────────────────────────
+
+class TestJobArtifacts(AutomationApiTestCase):
+    def put_artifact(self, relative_path, data=b"artifact bytes"):
+        path = os.path.join(self.root, *relative_path.split("/"))
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as handle:
+            handle.write(data)
+        return path
+
+    def finish_with_artifacts(self, entries):
+        status, job = self.create_job(dry_run=False)
+        self.assertEqual(status, 201)
+        self.service.store.finish_job(
+            job["id"], "succeeded", progress=100,
+            result={"dry_run": False, "stages": [], "artifacts": entries})
+        return job["id"]
+
+    def raw_get(self, path, headers=None):
+        connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=20)
+        try:
+            connection.request("GET", path, headers=dict(headers or {}))
+            response = connection.getresponse()
+            return response.status, response.read(), response.headers
+        finally:
+            connection.close()
+
+    def test_artifact_views_redact_paths_and_mint_only_job_scoped_urls(self):
+        job_id = "a" * 32
+        job = {
+            "id": job_id,
+            "result": {"artifacts": [
+                {
+                    "kind": "forged-kind",
+                    "path": "output/private/preview.png",
+                    "name": "forged-name",
+                    "url": "https://attacker.invalid/file",
+                    "bytes": 999999,
+                    "date": "2026-08-11",
+                    "day": "mon",
+                },
+                {"path": "../outside.txt"},
+                {"path": "content/scripts/daily.txt", "day": "tue"},
+            ]},
+        }
+
+        views = star_api._artifact_views(self.service, job)
+
+        self.assertEqual([view["id"] for view in views], ["0", "2"])
+        self.assertEqual([view["url"] for view in views], [
+            "/api/jobs/%s/artifacts/0" % job_id,
+            "/api/jobs/%s/artifacts/2" % job_id,
+        ])
+        self.assertEqual(views[0]["kind"], "image")
+        self.assertEqual(views[0]["name"], "preview.png")
+        self.assertEqual(views[1]["kind"], "text")
+        for view in views:
+            self.assertNotIn("path", view)
+            self.assertEqual(
+                set(view) - {"date", "day"},
+                {"id", "name", "kind", "content_type", "url"})
+            self.assertRegex(
+                view["url"],
+                r"^/api/jobs/%s/artifacts/(?:0|[1-9][0-9]{0,2})$" % job_id)
+        rendered = json.dumps(views)
+        self.assertNotIn("output/private", rendered)
+        self.assertNotIn("content/scripts", rendered)
+        self.assertNotIn("attacker.invalid", rendered)
+
+    def test_detail_verifies_files_reports_bytes_and_drops_missing_entries(self):
+        data = b"verified detail bytes"
+        self.put_artifact("output/2026-08-11/report.txt", data)
+        job_id = self.finish_with_artifacts([
+            {"kind": "text", "path": "output/2026-08-11/report.txt"},
+            {"kind": "text", "path": "output/2026-08-11/missing.txt"},
+        ])
+
+        status, detail = self.get("/api/jobs/" + job_id)
+
+        self.assertEqual(status, 200)
+        self.assertEqual(detail["result"]["artifacts"], [{
+            "id": "0",
+            "name": "report.txt",
+            "kind": "text",
+            "content_type": "text/plain; charset=utf-8",
+            "url": "/api/jobs/%s/artifacts/0" % job_id,
+            "bytes": len(data),
+        }])
+        self.assertNotIn("path", json.dumps(detail["result"]["artifacts"]))
+
+    def test_resolve_and_open_reject_missing_files_and_symlinks(self):
+        real = self.put_artifact("output/real.txt", b"real")
+        outside = os.path.join(self.state_dir, "outside.txt")
+        with open(outside, "wb") as handle:
+            handle.write(b"outside")
+        os.symlink(outside, os.path.join(self.root, "output", "linked.txt"))
+
+        outside_dir = os.path.join(self.state_dir, "outside-dir")
+        os.makedirs(outside_dir)
+        with open(os.path.join(outside_dir, "nested.txt"), "wb") as handle:
+            handle.write(b"outside nested")
+        os.symlink(outside_dir, os.path.join(self.root, "output", "linked-dir"))
+
+        for relative_path in (
+                "output/missing.txt",
+                "output/linked.txt",
+                "output/linked-dir/nested.txt",
+        ):
+            job = {"result": {"artifacts": [{"path": relative_path}]}}
+            with self.assertRaises(star_api.ApiError, msg=relative_path) as raised:
+                star_api.resolve_job_artifact(self.service, job, 0)
+            self.assertEqual(raised.exception.status, 404)
+
+        with self.assertRaises(star_api.ApiError):
+            star_api._open_artifact(self.root, ("output", "missing.txt"))
+        with self.assertRaises(star_api.ApiError):
+            star_api._open_artifact(self.root, ("output", "linked.txt"))
+
+        resolved = star_api.resolve_job_artifact(
+            self.service,
+            {"result": {"artifacts": [{"path": "output/real.txt"}]}},
+            0)
+        self.assertEqual(resolved.size, os.path.getsize(real))
+
+    def test_artifact_response_has_inline_no_store_security_headers(self):
+        data = b"0123456789"
+        self.put_artifact("output/renders/clip demo.txt", data)
+        job_id = self.finish_with_artifacts([
+            {"kind": "text", "path": "output/renders/clip demo.txt"},
+        ])
+
+        status, body, headers = self.raw_get(
+            "/api/jobs/%s/artifacts/0" % job_id)
+
+        self.assertEqual(status, 200)
+        self.assertEqual(body, data)
+        self.assertEqual(headers["Content-Type"], "text/plain; charset=utf-8")
+        self.assertEqual(headers["Content-Length"], str(len(data)))
+        self.assertEqual(headers["Content-Disposition"],
+                         'inline; filename="clip_demo.txt"')
+        self.assertEqual(headers["Accept-Ranges"], "bytes")
+        self.assertEqual(headers["Cache-Control"], "private, no-store")
+        self.assertEqual(headers["X-Content-Type-Options"], "nosniff")
+        self.assertEqual(headers["Referrer-Policy"], "no-referrer")
+        self.assertEqual(headers["X-Frame-Options"], "DENY")
+        self.assertEqual(headers["Cross-Origin-Resource-Policy"], "same-origin")
+        self.assertIn("frame-ancestors 'none'", headers["Content-Security-Policy"])
+        self.assertIn("sandbox", headers["Content-Security-Policy"])
+
+    def test_artifact_response_supports_closed_open_and_suffix_ranges(self):
+        data = b"0123456789"
+        self.put_artifact("output/video/sample.mp4", data)
+        job_id = self.finish_with_artifacts([
+            {"kind": "video", "path": "output/video/sample.mp4"},
+        ])
+        path = "/api/jobs/%s/artifacts/0" % job_id
+
+        for requested, expected_body, expected_range in (
+                ("bytes=2-5", b"2345", "bytes 2-5/10"),
+                ("bytes=6-", b"6789", "bytes 6-9/10"),
+                ("bytes=-3", b"789", "bytes 7-9/10"),
+        ):
+            status, body, headers = self.raw_get(path, {"Range": requested})
+            self.assertEqual(status, 206, requested)
+            self.assertEqual(body, expected_body, requested)
+            self.assertEqual(headers["Content-Range"], expected_range, requested)
+            self.assertEqual(headers["Content-Length"], str(len(expected_body)))
+            self.assertEqual(headers["Accept-Ranges"], "bytes")
+
+    def test_invalid_or_unsatisfiable_ranges_return_416_without_a_body(self):
+        data = b"0123456789"
+        self.put_artifact("output/audio/sample.mp3", data)
+        job_id = self.finish_with_artifacts([
+            {"kind": "audio", "path": "output/audio/sample.mp3"},
+        ])
+        path = "/api/jobs/%s/artifacts/0" % job_id
+
+        for requested in ("bytes=", "bytes=5-2", "bytes=10-", "bytes=-0",
+                          "bytes=0-1,4-5", "items=0-1"):
+            status, body, headers = self.raw_get(path, {"Range": requested})
+            self.assertEqual(status, 416, requested)
+            self.assertEqual(body, b"", requested)
+            self.assertEqual(headers["Content-Range"], "bytes */10", requested)
+            self.assertEqual(headers["Content-Length"], "0", requested)
+
+    def test_serving_missing_symlinked_or_other_job_artifacts_is_404(self):
+        os.makedirs(os.path.join(self.root, "output"), exist_ok=True)
+        outside = os.path.join(self.state_dir, "private.txt")
+        with open(outside, "wb") as handle:
+            handle.write(b"private")
+        os.symlink(outside, os.path.join(self.root, "output", "linked.txt"))
+        job_id = self.finish_with_artifacts([
+            {"path": "output/missing.txt"},
+            {"path": "output/linked.txt"},
+        ])
+
+        for index in (0, 1, 2):
+            status, payload = self.get(
+                "/api/jobs/%s/artifacts/%d" % (job_id, index))
+            self.assertEqual(status, 404, index)
+            self.assertEqual(payload["error"], "artifact is unavailable")
+
+        status, payload = self.get(
+            "/api/jobs/%s/artifacts/0" % ("b" * 32))
+        self.assertEqual(status, 404)
+        self.assertEqual(payload["error"], "unknown job")
 
 
 class TestJobExecution(AutomationApiTestCase):
