@@ -471,6 +471,64 @@ class TestJobStore(TempEnv):
         self.assertFalse(store.claim_schedule_run("2026-08-11"))
         self.assertTrue(store.claim_schedule_run("2026-08-12"))
 
+    def test_claiming_a_run_stamps_last_run_date(self):
+        store = self.store()
+        store.set_schedule(star_jobs.validate_schedule_input(
+            {"enabled": True, "time": "05:30", "stages": ["astro"]}))
+        self.assertIsNone(store.get_schedule()["last_run_date"])
+        self.assertTrue(store.claim_schedule_run("2026-08-11"))
+        self.assertEqual(store.get_schedule()["last_run_date"], "2026-08-11")
+
+    def test_releasing_a_run_undoes_both_halves_of_the_claim(self):
+        """A release has to clear last_run_date, not only the reservation row.
+
+        Regression: the reservation row was deleted but last_run_date was left
+        pointing at the released day, and Scheduler.tick returns early on
+        exactly that value — so a "released" day was still burned until
+        midnight and the run was lost instead of retried.
+        """
+        store = self.store()
+        store.set_schedule(star_jobs.validate_schedule_input(
+            {"enabled": True, "time": "05:30", "stages": ["astro"]}))
+        self.assertTrue(store.claim_schedule_run("2026-08-11"))
+        store.release_schedule_run("2026-08-11")
+        self.assertIsNone(store.get_schedule()["last_run_date"])
+        self.assertTrue(store.claim_schedule_run("2026-08-11"),
+                        "a released day must be claimable again")
+
+    def test_releasing_one_day_leaves_another_days_stamp_alone(self):
+        store = self.store()
+        store.set_schedule(star_jobs.validate_schedule_input(
+            {"enabled": True, "time": "05:30", "stages": ["astro"]}))
+        self.assertTrue(store.claim_schedule_run("2026-08-11"))
+        store.release_schedule_run("2026-08-10")
+        self.assertEqual(store.get_schedule()["last_run_date"], "2026-08-11")
+
+    def test_finish_job_will_not_overwrite_a_terminal_job(self):
+        """The first terminal write wins.
+
+        Two paths can try to finish the same job — execute_job finishing it
+        normally and JobRunner catching whatever escaped that — and a second
+        write would replace a real result with a generic failure.
+        """
+        store = self.store()
+        job = store.create_job(self.job_input())
+        store.claim_next()
+        self.assertTrue(store.finish_job(job["id"], "succeeded",
+                                         result={"stages": []}))
+        self.assertFalse(store.finish_job(job["id"], "failed",
+                                          safe_error="internal error"))
+        after = store.get_job(job["id"])
+        self.assertEqual(after["status"], "succeeded")
+        self.assertIsNone(after["safe_error"])
+        self.assertEqual(after["result"], {"stages": []})
+
+    def test_finish_job_still_rejects_a_non_terminal_status(self):
+        store = self.store()
+        job = store.create_job(self.job_input())
+        with self.assertRaises(ValueError):
+            store.finish_job(job["id"], "running")
+
     def test_schema_is_migration_safe(self):
         path = os.path.join(self.state_dir, "again.db")
         star_jobs.JobStore(path)
@@ -1735,6 +1793,52 @@ class TestScheduler(TempEnv):
         # The claim was released, so the day is not silently burned: once the
         # manual job finishes, a later tick can still run it.
         self.assertTrue(self.svc.store.claim_schedule_run("2026-08-11"))
+
+    def test_a_released_day_is_actually_retried_once_the_queue_drains(self):
+        """The end-to-end form of the release bug, through tick() itself.
+
+        Releasing the reservation row was not enough: last_run_date still named
+        the released day, so every later tick returned early and the scheduled
+        run was lost for the rest of the day even though nothing was wrong any
+        more.
+        """
+        manual = self.svc.store.create_job(star_jobs.validate_job_input(
+            {"from_date": "2026-08-11", "stages": ["astro"]}))
+        self.enable()
+        self.assertIsNone(self.sched.tick(now=self.now(6)))
+        self.assertIsNone(self.svc.store.get_schedule()["last_run_date"])
+
+        self.svc.store.finish_job(manual["id"], "succeeded")
+        job = self.sched.tick(now=self.now(7))
+        self.assertIsNotNone(job, "the released day must run once the queue is free")
+        self.assertEqual(job["origin"], "schedule")
+        self.assertIsNone(self.sched.tick(now=self.now(8)),
+                          "and it still runs only once that day")
+
+    def test_a_schedule_that_no_longer_validates_releases_the_day(self):
+        """A stored row that validate_job_input rejects must not burn the day.
+
+        Everything after the claim runs under the release, so a bad row costs a
+        log line and a retry rather than the whole day's run.
+        """
+        self.enable()
+        with mock.patch.object(
+                star_jobs, "validate_job_input",
+                side_effect=star_jobs.JobValidationError("stages must not be empty",
+                                                         "stages")):
+            self.assertIsNone(self.sched.tick(now=self.now(6)))
+        self.assertIsNone(self.svc.store.get_schedule()["last_run_date"])
+        self.assertIsNotNone(self.sched.tick(now=self.now(7)),
+                             "the next tick must be free to try again")
+
+    def test_an_unexpected_failure_releases_the_day_and_still_raises(self):
+        self.enable()
+        with mock.patch.object(self.svc.store, "create_job",
+                               side_effect=RuntimeError("database is on fire")):
+            with self.assertRaises(RuntimeError):
+                self.sched.tick(now=self.now(6))
+        self.assertIsNone(self.svc.store.get_schedule()["last_run_date"])
+        self.assertIsNotNone(self.sched.tick(now=self.now(7)))
 
 
 if __name__ == "__main__":

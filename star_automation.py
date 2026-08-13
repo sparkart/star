@@ -355,6 +355,7 @@ def run_command(argv, timeout, cwd=None, env=None, on_line=None, is_cancelled=No
     selector.register(proc.stdout, selectors.EVENT_READ)
     cancelled = False
     timed_out = False
+    streaming = True
     try:
         while True:
             if is_cancelled is not None and is_cancelled():
@@ -363,23 +364,41 @@ def run_command(argv, timeout, cwd=None, env=None, on_line=None, is_cancelled=No
             if time.monotonic() > deadline:
                 timed_out = True
                 break
-            for _key, _mask in selector.select(timeout=0.5):
-                line = proc.stdout.readline()
-                if not line:
-                    break
-                line = star_redact.redact_text(line.rstrip("\n")[:MAX_LINE], limit=MAX_LINE)
-                if len(captured) < MAX_CAPTURED_LINES:
-                    captured.append(line)
-                if on_line is not None and line:
-                    on_line(line)
-            if proc.poll() is not None:
-                # Drain whatever is still buffered before giving up the loop.
-                for line in proc.stdout:
-                    line = star_redact.redact_text(line.rstrip("\n")[:MAX_LINE], limit=MAX_LINE)
+            if streaming:
+                for _key, _mask in selector.select(timeout=0.5):
+                    line = proc.stdout.readline()
+                    if not line:
+                        # End of output. A closed pipe selects ready
+                        # immediately and forever, so a child that closes
+                        # stdout and keeps working (ffmpeg finishing a long
+                        # encode) would spin this loop at full CPU until its
+                        # timeout. Stop polling the pipe instead.
+                        selector.unregister(proc.stdout)
+                        streaming = False
+                        break
+                    line = star_redact.redact_text(line.rstrip("\n")[:MAX_LINE],
+                                                   limit=MAX_LINE)
                     if len(captured) < MAX_CAPTURED_LINES:
                         captured.append(line)
                     if on_line is not None and line:
                         on_line(line)
+            else:
+                # Wait for the exit at the same cadence the selector polled at,
+                # so cancellation and the deadline stay just as responsive.
+                try:
+                    proc.wait(timeout=0.5)
+                except subprocess.TimeoutExpired:
+                    pass
+            if proc.poll() is not None:
+                # Drain whatever is still buffered before giving up the loop.
+                if streaming:
+                    for line in proc.stdout:
+                        line = star_redact.redact_text(line.rstrip("\n")[:MAX_LINE],
+                                                       limit=MAX_LINE)
+                        if len(captured) < MAX_CAPTURED_LINES:
+                            captured.append(line)
+                        if on_line is not None and line:
+                            on_line(line)
                 break
     finally:
         selector.close()
@@ -778,6 +797,19 @@ class AudioStage(StageAdapter):
 
     def prerequisites(self, ctx):
         if self.engine(ctx) == "google_tts":
+            # An API key is synthesised over plain HTTP and needs no library;
+            # a service account goes through the Google client. That import is
+            # checked here rather than at synthesis time because a package that
+            # is missing halfway through execute() surfaces to the operator as
+            # "internal error while running the job" instead of a reason.
+            if ctx.providers.get("google_tts").stored().get("mode") == "api_key":
+                return []
+            try:
+                from google.cloud import texttospeech  # noqa: F401
+            except ImportError:
+                return ["the stored Google Cloud TTS credential is a service "
+                        "account, but the google-cloud-texttospeech package is "
+                        "not installed (pip install google-cloud-texttospeech)"]
             return []
         try:
             import gtts  # noqa: F401
@@ -833,6 +865,12 @@ class AudioStage(StageAdapter):
                     self._google(ctx, text, tmp)
                 else:
                     self._gtts(text, tmp)
+                # Checked before the promote, not after: atomic_replace would
+                # happily move a zero-byte file into output/ and the video
+                # stage would then render a silent clip from it.
+                if not os.path.isfile(tmp) or os.path.getsize(tmp) == 0:
+                    raise StageFailed(
+                        "the %s engine produced no audio for %s/%s" % (engine, date, day))
                 target = self._target(ctx, date, day)
                 atomic_replace(tmp, target)
                 meta = {"date": date, "day": day, "engine": engine}
@@ -863,19 +901,41 @@ class AudioStage(StageAdapter):
             self._google_api_key(text, out_path, api_key, voice)
             return
 
-        from google.cloud import texttospeech
+        try:
+            from google.cloud import texttospeech
+        except ImportError:
+            # Blocked, not failed: nothing is wrong with the job or the
+            # credential, the server is simply missing a package.
+            raise StageBlocked(
+                "the stored Google Cloud TTS credential is a service account, but "
+                "the google-cloud-texttospeech package is not installed on this "
+                "server") from None
         path = provider.credentials_path()
-        client = texttospeech.TextToSpeechClient.from_service_account_file(path)
-        response = client.synthesize_speech(
-            input=texttospeech.SynthesisInput(text=text),
-            voice=texttospeech.VoiceSelectionParams(
-                language_code=star_providers.GOOGLE_TTS_LANGUAGE_CODE,
-                name=voice["name"],
-                ssml_gender=getattr(texttospeech.SsmlVoiceGender, voice["gender"])),
-            audio_config=texttospeech.AudioConfig(
-                audio_encoding=texttospeech.AudioEncoding.MP3))
+        if not path:
+            raise StageFailed("the stored Google Cloud TTS service-account "
+                              "credential has no key file path")
+        try:
+            client = texttospeech.TextToSpeechClient.from_service_account_file(path)
+            response = client.synthesize_speech(
+                input=texttospeech.SynthesisInput(text=text),
+                voice=texttospeech.VoiceSelectionParams(
+                    language_code=star_providers.GOOGLE_TTS_LANGUAGE_CODE,
+                    name=voice["name"],
+                    ssml_gender=getattr(texttospeech.SsmlVoiceGender, voice["gender"])),
+                audio_config=texttospeech.AudioConfig(
+                    audio_encoding=texttospeech.AudioEncoding.MP3))
+            audio = getattr(response, "audio_content", None)
+        except Exception as exc:  # noqa: BLE001 - expose only a scrubbed summary
+            # The client's own errors quote request bodies and headers, so the
+            # text is redacted for the same reason the API-key path redacts it.
+            raise StageFailed(
+                "Google Cloud TTS service-account synthesis failed: %s"
+                % (star_redact.redact_text(str(exc), limit=300)
+                   or exc.__class__.__name__)) from None
+        if not audio:
+            raise StageFailed("Google Cloud TTS returned no audio for this script")
         with open(out_path, "wb") as fh:
-            fh.write(response.audio_content)
+            fh.write(audio)
 
     def _google_api_key(self, text, out_path, api_key, voice):
         payload = {
@@ -915,8 +975,19 @@ class AudioStage(StageAdapter):
 
     def _gtts(self, text, out_path):
         star_providers._require_network("gtts synthesis")
-        from gtts import gTTS
-        gTTS(text=text, lang="th").save(out_path)
+        try:
+            from gtts import gTTS
+        except ImportError:
+            raise StageBlocked("the gTTS fallback is not installed on this "
+                               "server and no Google Cloud TTS credential is "
+                               "configured") from None
+        try:
+            gTTS(text=text, lang="th").save(out_path)
+        except Exception as exc:  # noqa: BLE001 - a network summary, not a traceback
+            raise StageFailed(
+                "gTTS synthesis failed: %s"
+                % (star_redact.redact_text(str(exc), limit=300)
+                   or exc.__class__.__name__)) from None
 
 
 # ── overlay text ──────────────────────────────────────────────────────
@@ -1358,24 +1429,56 @@ def _ffmpeg_escape(text):
     return text
 
 
+# Publishing order is a dependency order, not the order the boxes were ticked
+# in. A LINE message carries no bytes: it links to the .mp4 that the R2 upload
+# put on the public base URL, so R2 has to finish before the broadcast goes
+# out. star_jobs' canonical platform order is the vocabulary order and puts
+# "line" before "r2", which meant a job selecting both broadcast a link to a
+# file that had not been uploaded yet. A LINE broadcast is metered and cannot
+# be recalled, so this ordering is load-bearing rather than cosmetic.
+PUBLISH_ORDER = ("r2", "youtube", "facebook", "line", "tiktok", "shopee")
+
+
+def publish_sequence(platforms):
+    """The selected platforms in dependency order; anything unknown goes last."""
+    selected = list(platforms or [])
+    ordered = [name for name in PUBLISH_ORDER if name in selected]
+    return ordered + [name for name in selected if name not in PUBLISH_ORDER]
+
+
 class PublishStage(StageAdapter):
     """Per-platform publishing, with a handoff package for manual platforms."""
 
     name = "publish"
     label = "Publish"
 
+    # LINE links to media hosted elsewhere, so it cannot be the only target.
+    LINE_NEEDS_R2 = ("LINE: a LINE message links to the video hosted on Cloudflare "
+                     "R2, so R2 must be published by the same job. Add r2 to the "
+                     "platform list, or the broadcast would advertise a URL this "
+                     "job never uploaded.")
+
     def prerequisites(self, ctx):
         missing = []
-        for platform in ctx.input.get("platforms") or []:
+        platforms = ctx.input.get("platforms") or []
+        for platform in publish_sequence(platforms):
             provider = ctx.providers.get(platform)
             if provider.automation == star_providers.AUTOMATION_FULL:
                 reason = provider.prerequisite_error()
                 if reason:
                     missing.append("%s: %s" % (provider.label, reason))
+        # Checked here, before a single platform is contacted: discovering this
+        # halfway through execute() would mean YouTube and Facebook had already
+        # published while the broadcast the operator actually wanted blocks.
+        if "line" in platforms and "r2" not in platforms:
+            missing.append(self.LINE_NEEDS_R2)
         return missing
 
     def plan(self, ctx):
-        for platform in ctx.input.get("platforms") or []:
+        platforms = ctx.input.get("platforms") or []
+        if "line" in platforms and "r2" not in platforms:
+            ctx.plan("publish would block: " + self.LINE_NEEDS_R2)
+        for platform in publish_sequence(platforms):
             provider = ctx.providers.get(platform)
             if provider.automation == star_providers.AUTOMATION_FULL:
                 reason = provider.prerequisite_error()
@@ -1389,7 +1492,11 @@ class PublishStage(StageAdapter):
 
     def execute(self, ctx):
         results = {}
-        for platform in ctx.input.get("platforms") or []:
+        platforms = ctx.input.get("platforms") or []
+        if "line" in platforms and "r2" not in platforms:
+            raise StageBlocked(self.LINE_NEEDS_R2)
+        # Dependency order, so the R2 object exists before LINE links to it.
+        for platform in publish_sequence(platforms):
             ctx.check_cancelled()
             provider = ctx.providers.get(platform)
             if provider.automation != star_providers.AUTOMATION_FULL:
@@ -1522,6 +1629,11 @@ class PublishStage(StageAdapter):
             raise StageBlocked(
                 "LINE needs a public media URL; configure Cloudflare R2 and include "
                 "it in the platform list so the video is hosted first")
+        # Belt and braces behind the preflight check. A broadcast cannot be
+        # recalled, so the URL is only ever built for a job that also uploaded
+        # the object it points at.
+        if "r2" not in (ctx.input.get("platforms") or []):
+            raise StageBlocked(self.LINE_NEEDS_R2)
         media_url = "%s/star/%s/%s.mp4" % (r2.stored()["public_base_url"], date, day)
         endpoint = ("https://api.line.me/v2/bot/message/broadcast"
                     if stored.get("broadcast", True)
@@ -1830,21 +1942,37 @@ class Scheduler(threading.Thread):
 
         if not self.service.store.claim_schedule_run(run_date):
             return None  # another tick already won the race
-        target = now.date() + timedelta(days=config["date_offset_days"])
-        job_input = star_jobs.validate_job_input({
-            "from_date": target.isoformat(),
-            "to_date": target.isoformat(),
-            "days": config["days"],
-            "stages": config["stages"],
-            "platforms": config["platforms"] or None,
-            "dry_run": config["dry_run"],
-        })
+
+        # Everything past the claim runs under the release: the claim is what
+        # stops a second tick, so anything that stops *this* tick from queueing
+        # a job has to hand the day back. A stored schedule that no longer
+        # validates (an old row, a hand-edited database) used to raise straight
+        # out of tick() with the day already claimed, which silently skipped the
+        # run and left no job to explain why.
         try:
+            target = now.date() + timedelta(days=config["date_offset_days"])
+            job_input = star_jobs.validate_job_input({
+                "from_date": target.isoformat(),
+                "to_date": target.isoformat(),
+                "days": config["days"],
+                "stages": config["stages"],
+                "platforms": config["platforms"] or None,
+                "dry_run": config["dry_run"],
+            })
             job = self.service.store.create_job(job_input, origin="schedule")
         except JobConflict:
-            # A manual job is running; skip today rather than queueing behind it.
+            # A manual job is running. Hand the day back so a later tick can
+            # still run it once the queue drains, rather than losing the run.
             self.service.store.release_schedule_run(run_date)
             return None
+        except JobValidationError as exc:
+            self.service.store.release_schedule_run(run_date)
+            self.service.log_internal(
+                "scheduled run for %s rejected by validation: %s" % (run_date, exc))
+            return None
+        except Exception:
+            self.service.store.release_schedule_run(run_date)
+            raise
         self.service.store.attach_schedule_job(run_date, job["id"])
         return job
 

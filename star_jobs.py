@@ -228,6 +228,11 @@ def validate_job_input(payload):
             raise JobValidationError("note must be a string", "note")
         if len(note) > 500:
             raise JobValidationError("note exceeds 500 characters", "note")
+        # The note is operator text that is echoed back into the job list and
+        # the event log, so it gets the same control-character rule as the
+        # overlay line. Tabs and newlines stay legal: a note is prose.
+        if any(ch in _CONTROL_CHARS for ch in note):
+            raise JobValidationError("note must not contain control characters", "note")
 
     overlay_mode, overlay_text = _valid_overlay(payload)
     background_asset_id = _valid_background_asset_id(payload.get("background_asset_id"))
@@ -515,18 +520,29 @@ class JobStore:
             conn.close()
 
     def finish_job(self, job_id, status, safe_error=None, result=None, progress=None):
+        """Move an active job to a terminal state. Returns True if it moved.
+
+        The first terminal write wins. Two paths can try to finish the same job
+        — `execute_job` finishing it normally and `JobRunner` catching whatever
+        escaped that — and without the status guard the second write would
+        overwrite the first, replacing a real outcome (and its result payload)
+        with a generic failure. A job that is already terminal is left exactly
+        as it was and False is returned.
+        """
         if status not in TERMINAL_STATES:
             raise ValueError("not a terminal status: %r" % status)
         now = utcnow()
         conn = self.connect()
         try:
-            conn.execute(
+            cursor = conn.execute(
                 "UPDATE jobs SET status=?, safe_error=?, result_json=?, progress=?,"
-                " finished_at=?, updated_at=?, current_stage=NULL WHERE id=?",
+                " finished_at=?, updated_at=?, current_stage=NULL"
+                " WHERE id=? AND status IN (?, ?)",
                 (status, safe_error,
                  json.dumps(result, ensure_ascii=False) if result is not None else None,
                  progress if progress is not None else (100 if status == "succeeded" else 0),
-                 now, now, job_id))
+                 now, now, job_id) + ACTIVE_STATES)
+            return cursor.rowcount > 0
         finally:
             conn.close()
 
@@ -679,20 +695,23 @@ class JobStore:
         """Reserve today's scheduled run. False if it was already reserved.
 
         The PRIMARY KEY on run_date is the actual guard — two scheduler ticks in
-        the same minute cannot both win the insert.
+        the same minute cannot both win the insert. The reservation and the
+        `last_run_date` stamp share one transaction: they are two records of the
+        same fact, and a crash between two separate writes used to leave the
+        schedule claiming a run it had not marked.
         """
         conn = self.connect()
         try:
-            conn.execute(
-                "INSERT INTO schedule_runs (run_date, created_at) VALUES (?, ?)",
-                (run_date, utcnow()))
-        except sqlite3.IntegrityError:
-            return False
-        finally:
-            conn.close()
-        conn = self.connect()
-        try:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                conn.execute(
+                    "INSERT INTO schedule_runs (run_date, created_at) VALUES (?, ?)",
+                    (run_date, utcnow()))
+            except sqlite3.IntegrityError:
+                conn.execute("ROLLBACK")
+                return False
             conn.execute("UPDATE schedule SET last_run_date = ? WHERE id = 1", (run_date,))
+            conn.execute("COMMIT")
         finally:
             conn.close()
         return True
@@ -706,10 +725,22 @@ class JobStore:
             conn.close()
 
     def release_schedule_run(self, run_date):
-        """Undo a claim when the run could not actually be started."""
+        """Undo a claim when the run could not actually be started.
+
+        Both halves of the claim have to come back off, in the same transaction
+        that took them. Deleting only the `schedule_runs` row left
+        `last_run_date` pointing at today, and `Scheduler.tick` returns early on
+        exactly that value — so a released day was still burned for the rest of
+        the day and the run was lost rather than retried.
+        """
         conn = self.connect()
         try:
+            conn.execute("BEGIN IMMEDIATE")
             conn.execute("DELETE FROM schedule_runs WHERE run_date = ?", (run_date,))
+            conn.execute(
+                "UPDATE schedule SET last_run_date = NULL"
+                " WHERE id = 1 AND last_run_date = ?", (run_date,))
+            conn.execute("COMMIT")
         finally:
             conn.close()
 
