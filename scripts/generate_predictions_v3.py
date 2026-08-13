@@ -144,6 +144,18 @@ def build_body(day):
     else:
         sentences.append("ค่อย ๆ ทำทีละเรื่อง แล้วเลือกทางที่เหมาะกับสถานการณ์ของคุณ")
 
+    # ── ตัดให้อยู่ 3-5 ประโยคตาม contract ──
+    # คงภาพรวม (แรก) + คำแนะนำ (ท้าย) ไว้เสมอ ตัดส่วนกลางที่เกิน
+    if len(sentences) > 5:
+        head = sentences[:1]
+        tail = sentences[-1:]
+        middle = sentences[1:-1]
+        # ตัด themes/change_msg ก่อน (ข้อมูลเสริม) แล้วตามด้วย caution/pos เกิน
+        middle = [s for s in middle if not s.startswith("ข้อมูลชี้ให้เห็น") and not s.startswith("วันนี้เป็นช่วงเปลี่ยนผ่าน")]
+        while len(head) + len(middle) + len(tail) > 5:
+            middle.pop()
+        sentences = head + middle + tail
+
     return sentences
 
 
